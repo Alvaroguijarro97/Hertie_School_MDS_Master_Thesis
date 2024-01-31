@@ -90,4 +90,13 @@ Other alternative methods that I might have to consider for this project could b
 2. Dive into Machine learning techniques, such as decision trees or random forests, that can be used to identify complex nonlinear relationships between a multitude of factors and job creation metrics.
 
 ---
+## Data Report
+As stated on section 5 of the PAP, I have several datasets I wish to look into and retrieve in order to conduct my analysis with. Most of them are available in Colombia's National Statistical Agency (DANE), but require some intense data cleaning and manipulation in order to set them in a functional format. Some of the data sets I wish to retrieve for my analysis, basing my choice from the literature review conducted so far, would be the following: 
+
+```{r}
+
+```
+
+
+---
 References
