@@ -1,13 +1,16 @@
 ---
-title: "Master Thesis PAP -'Job Creation in Colombian Cities: An analysis on economic, social, demographic, political, and geospatial factors' "
+title: "Master Thesis PAP -'Job Creation in Colombian Cities: An analysis on economic,
+  social, demographic, political, and geospatial factors' "
 author: "Alvaro Guijarro"
 date: "`r Sys.Date()`"
-output: 
+output:
   html_document:
     theme: simplex
-    toc: yes
+    toc: true
     toc_float:
       collapsed: true
+  pdf_document:
+    toc: true
 bibliography: references.bib
 csl: apa.csl
 ---
