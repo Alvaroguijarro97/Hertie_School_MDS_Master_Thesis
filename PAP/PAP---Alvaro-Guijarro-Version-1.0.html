@@ -1810,6 +1810,177 @@ random forests, that can be used to identify complex nonlinear
 relationships between a multitude of factors and job creation
 metrics.</li>
 </ol>
+</div>
+<div id="data-report" class="section level2">
+<h2>Data Report</h2>
+<p>As stated on section 5 of the PAP, I have several datasets I wish to
+look into and retrieve in order to conduct my analysis with. Most of
+them are available in Colombia’s National Statistical Agency (DANE), but
+require some intense data cleaning and manipulation in order to set them
+in a functional format. Some of the data sets I wish to retrieve for my
+analysis, basing my choice from the literature review conducted so far,
+would be the following:</p>
+<pre><code>## Warning: package &#39;readxl&#39; was built under R version 4.2.2</code></pre>
+<table>
+<colgroup>
+<col width="17%" />
+<col width="38%" />
+<col width="1%" />
+<col width="29%" />
+<col width="3%" />
+<col width="1%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Title</th>
+<th align="left">Description</th>
+<th align="left">Source</th>
+<th align="left">Link</th>
+<th align="left">Timeframe</th>
+<th align="left">Got it?</th>
+<th align="left">Cleaned?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">DCD-area-proypoblacion-Mun-1985-2024-(Population
+Evolution of Cities)</td>
+<td align="left">Population evolution in cities</td>
+<td align="left">DANE</td>
+<td align="left"><a href="https://www.dane.gov.co/index.php/estadisticas-por-tema/demografia-y-poblacion/proyecciones-de-poblacion" class="uri">https://www.dane.gov.co/index.php/estadisticas-por-tema/demografia-y-poblacion/proyecciones-de-poblacion</a></td>
+<td align="left">1984-2035</td>
+<td align="left">Yes</td>
+<td align="left">No</td>
+</tr>
+<tr class="even">
+<td align="left">NA</td>
+<td align="left">Evolution of % of educated citizens / level of
+education in cities / % of citizens on different education levels
+(university, high school, primary, none)</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">GEIH_cleaned_2015-01-2023-07</td>
+<td align="left">Evolution in # of jobs (per sector) in cities</td>
+<td align="left">DANE</td>
+<td align="left"><a href="https://www.dane.gov.co/index.php/estadisticas-por-tema/mercado-laboral/empleo-y-desempleo/mercado-laboral-historicos" class="uri">https://www.dane.gov.co/index.php/estadisticas-por-tema/mercado-laboral/empleo-y-desempleo/mercado-laboral-historicos</a></td>
+<td align="left">2015.01-2023.07</td>
+<td align="left">Yes</td>
+<td align="left">Yes (missing previous years)</td>
+</tr>
+<tr class="even">
+<td align="left">NA</td>
+<td align="left">Evolution of purchasing power / multidimensional
+poverty in cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">NA</td>
+<td align="left">Evolution of coverage of basic services (gas / water /
+electicity) in cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">NA</td>
+<td align="left">Evolution of imports and exports of cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">NA</td>
+<td align="left">Evolution of crime rates in cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">NA</td>
+<td align="left">Evolution of taxes (per sector) in cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">NA</td>
+<td align="left">Evolution of micro, medium, and large companies (per
+sector) in cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">NA</td>
+<td align="left">Evolution in # of companies’ clusters (per sector) in
+cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">NA</td>
+<td align="left">Evolution in # of syndicates (per sector) in
+cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">NA</td>
+<td align="left">Evolution of local authorities corruption in
+cities</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">NA</td>
+<td align="left">Longitud and Latitude location of city (geographic
+location)</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">NA</td>
+<td align="left">Evolution of % of workers by contract type</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
+</tr>
+</tbody>
+</table>
 <hr />
 <p>References</p>
 <div id="refs" class="references csl-bib-body hanging-indent" line-spacing="2">

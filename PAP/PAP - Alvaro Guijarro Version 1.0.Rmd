@@ -89,14 +89,15 @@ Other alternative methods that I might have to consider for this project could b
 1. Conducting a time series analysis to identify the effects on job metrics' evolution with regards to economic, social, demographic, political, or geospatial factors over time.
 2. Dive into Machine learning techniques, such as decision trees or random forests, that can be used to identify complex nonlinear relationships between a multitude of factors and job creation metrics.
 
----
 ## Data Report
 As stated on section 5 of the PAP, I have several datasets I wish to look into and retrieve in order to conduct my analysis with. Most of them are available in Colombia's National Statistical Agency (DANE), but require some intense data cleaning and manipulation in order to set them in a functional format. Some of the data sets I wish to retrieve for my analysis, basing my choice from the literature review conducted so far, would be the following: 
 
-```{r}
-
+```{r echo=FALSE, results='asis', warning=FALSE}
+library(readxl)
+Possible_datasets <- read_excel("C:/Users/alvar/OneDrive/Documents/GitHub/Hertie_School_MDS_Master_Thesis/Datasets/List_of_Possible_Data_Sets.xlsx")
+knitr::kable(Possible_datasets, caption = "Possible Datasets")
 ```
 
-
+Let's discuss the 1st and 3rd tables I've adquired so far. I already organized the official Colombian Population evolution in cities, but I'm missing to clean it and just have the time periods necessary for my analysis, as well as the cities that are interesting to my research. 
 ---
 References
