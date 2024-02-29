@@ -2,12 +2,14 @@ library(readxl)
 library(dplyr)
 library(tidyr)
 library(readr)
+library(writexl)
+library(lubridate)
 
 getwd()
 #setwd()
 
 library(readxl)
-df <- read_excel("anex-GEIH-sep2023-(Gran Encuesta Integrada de Hogares).xlsx", 
+df <- read_excel("anex-GEIH-dic2023-(Gran Encuesta Integrada de Hogares).xlsx", 
                  sheet = "Ocupados 23 Ciudades_rama_Trim")
 #View(df)
 
@@ -125,6 +127,8 @@ long_df <- joint_df %>%
   mutate(
     # Add "-01" to the date and then convert it to a Date format
     date = as.Date(paste0(date, "-01"), format = "%Y-%m-%d"),
+    # Add 2 months to each date to represent the last month of the averaging period
+    date = date + months(2),
     workers = as.double(workers) * 1000,
   )
 
