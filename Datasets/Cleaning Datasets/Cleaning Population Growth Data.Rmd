@@ -21,7 +21,7 @@ library(purrr)
 ```
 
 ```{r}
-setwd("C:/Users/alvar/OneDrive/Documents/GitHub/Hertie_School_MDS_Master_Thesis")
+setwd("C:/Users/alvar/OneDrive/Documents/GitHub/Hertie_School_MDS_Master_Thesis/Datasets")
 ```
 
 
@@ -236,10 +236,26 @@ filtered_monthly_data$date <- format(as.POSIXct(filtered_monthly_data$date), "%Y
 
 str(filtered_monthly_data)
 ```
+```{r add column for monthly information}
+annual_population <- final_joint_data_2005_2035 %>%
+  select(city_id, year, population)
+filtered_monthly_data$year <- as.integer(filtered_monthly_data$year)
+filtered_monthly_data <- filtered_monthly_data %>%
+  left_join(annual_population, by = c("city_id", "year"))
+
+
+#Selecting and renaming the remaining columns
+filtered_monthly_data <- filtered_monthly_data %>%
+  select(city, city_id, date, population_month = population.x, year, month, population_year = population.y)
+filtered_monthly_data$population_month <- round(filtered_monthly_data$population_month,0)
+str(filtered_monthly_data)
+```
+
+
 ```{r chart monty}
 # Create the interactive plot
 plotly_obj <- filtered_monthly_data %>%
-  plot_ly(x = ~date, y = ~population, color = ~city, type = 'scatter', mode = 'lines+markers') %>%
+  plot_ly(x = ~date, y = ~population_month, color = ~city, type = 'scatter', mode = 'lines+markers') %>%
   layout(
     title = "Monthly Population Evolution by City (Dec 2010 - Dec 2023)",
     xaxis = list(title = "Year"),
