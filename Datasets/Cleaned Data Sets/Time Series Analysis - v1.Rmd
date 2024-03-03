@@ -1,0 +1,165 @@
+---
+title: "Time series models"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries, include=Fase}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(forecast)
+library(stats)
+library(tseries)
+```
+
+```{r}
+getwd()
+```
+
+
+```{r read datasets}
+GEIH <- read_excel("GEIH_cleaned_2015-03-2023-12.xlsx")
+Population <- read_excel("Population_cleaned_2010-12-2023-12.xlsx")
+CPI <- read_excel("CPI_cleaned_2015-01-2024-01.xlsx")
+CPI_monthly_var <- read_excel("CPI_Montly_var_cleaned_2015-01-2024-01.xlsx")
+CPI_year_to_date_var <- read_excel("CPI_Year_to_date_var_cleaned_2015-01-2024-01.xlsx")
+CPI_yearly_var <- read_excel("CPI_Yearly_var_cleaned_2015-01-2024-01.xlsx")
+```
+
+
+```{r proof they have the necessary information}
+head(GEIH)
+head(Population)
+head(CPI)
+head(CPI_monthly_var)
+head(CPI_year_to_date_var)
+head(CPI_yearly_var)
+```
+Let's make sure all of the columns are in the same format in order to perform the join. 
+```{r}
+GEIH$date <- format(as.Date(GEIH$date), "%Y-%m")
+GEIH$city <- as.character(GEIH$city)
+
+Population$date <- format(as.Date(Population$date), "%Y-%m")
+Population$city <- as.character(Population$city)
+
+```
+
+```{r}
+# Perform left joins to combine datasets based on 'city' and 'date'
+df_analysis <- GEIH %>%
+  inner_join(Population, by = c("city", "date"), suffix = c("", ".pop")) %>%
+  inner_join(CPI, by = c("city", "date"), suffix = c("", ".cpi")) %>%
+  inner_join(CPI_monthly_var, by = c("city", "date"), suffix = c("", ".cpi_m_var")) %>%
+  inner_join(CPI_year_to_date_var, by = c("city", "date"), suffix = c("", ".cpi_ytd_var")) %>%
+  inner_join(CPI_yearly_var, by = c("city", "date"), suffix = c("", ".cpi_y_var"))
+
+# Select relevant columns from joined dataset
+df_analysis <- df_analysis %>%
+  select(city, date, Concepto, workers, population_month, population_year, CPI, CPI_month_var, CPI_year_to_date_var, CPI_year_var)
+
+# View the first few rows of the final dataset to confirm everything looks as expected
+head(df_analysis)
+```
+Let's now check that the information makes sense / it was joined properly. We will be testing this on the information from the city of Barranquilla.
+```{r}
+df_analysis_baq <- df_analysis %>%
+  filter(city == "BARRANQUILLA A.M.", Concepto == "Ocupados") %>%
+  select(city, Concepto, city_id, date, year, month, workers, population_month, population_year, CPI, CPI_month_var, CPI_year_var, CPI_year_to_date_var)
+
+# Round the column of workers so they are integers
+df_analysis_baq$workers <- round(df_analysis_baq$workers,0)
+df_analysis_baq
+```
+
+
+```{r}
+# Ensure that 'date' is in Date format for plotting
+df_analysis_baq$date <- as.Date(paste0(df_analysis_baq$date, "-01"), format = "%Y-%m-%d")
+
+# Plot date vs workers, population_month, population_year
+ggplot(df_analysis_baq) +
+  geom_line(aes(x = date, y = workers, color = "Workers")) +
+  geom_line(aes(x = date, y = population_month, color = "Population Month")) +
+  geom_line(aes(x = date, y = population_year, color = "Population Year")) +
+  labs(title = "Date vs Workers, Population Month, Population Year",
+       x = "Date",
+       y = "Count") +
+  scale_color_manual(values = c("Workers" = "blue", "Population Month" = "green", "Population Year" = "red")) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot date vs CPI
+ggplot(df_analysis_baq) +
+  geom_line(aes(x = date, y = CPI, color = "CPI")) +
+  labs(title = "Date vs CPI",
+       x = "Date",
+       y = "CPI") +
+  scale_color_manual(values = c("CPI" = "purple")) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot date vs CPI_month_var, CPI_year_var, CPI_year_to_date_var
+ggplot(df_analysis_baq) +
+  geom_line(aes(x = date, y = CPI_month_var, color = "CPI Month Variation")) +
+  geom_line(aes(x = date, y = CPI_year_var, color = "CPI Year Variation")) +
+  geom_line(aes(x = date, y = CPI_year_to_date_var, color = "CPI Year to Date Variation")) +
+  labs(title = "Date vs CPI Variations",
+       x = "Date",
+       y = "CPI Variation") +
+  scale_color_manual(values = c("CPI Month Variation" = "orange", "CPI Year Variation" = "pink", "CPI Year to Date Variation" = "cyan")) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+Let's fit some simple prediction models, but more research and data cleaning most be done in order to identify the best approach to our model. 
+
+```{r}
+# Split the data into training and test sets
+train <- df_analysis_baq[df_analysis_baq$date < "2023-01-01", ]
+test <- df_analysis_baq[df_analysis_baq$date >= "2023-01-01", ]
+
+# Build the univariate model using the historical 'workers' data
+uni_model <- auto.arima(train$workers)
+
+# Forecast the 'workers' for 2024
+uni_forecast <- forecast(uni_model, h = nrow(test))
+
+# Build the multivariate model
+# Note: You need to check for stationarity and co-integration among variables for an accurate multivariate model.
+multi_model <- lm(workers ~ population_month + population_year + CPI + CPI_month_var + CPI_year_var + CPI_year_to_date_var, data = train)
+
+# Forecast 'workers' for 2024 using the multivariate model
+# For multivariate models, we don't have a direct function like forecast(), so we have to predict manually.
+test$predicted_workers <- predict(multi_model, newdata = test)
+
+# Evaluate the models
+# For the univariate model
+accuracy(uni_forecast, test$workers)
+
+# For the multivariate model
+multi_accuracy <- with(test, mean((workers - predicted_workers)^2)) # Mean Squared Error
+
+# Visualization
+plot(test$date, test$workers, type = "l", col = "blue", xlab = "Date", ylab = "Workers", main = "Actual vs Predicted Workers for Barranquilla in 2024")
+lines(test$date, uni_forecast$mean, col = "red")
+lines(test$date, test$predicted_workers, col = "black")
+legend("topleft", legend = c("Actual", "Univariate", "Multivariate"), col = c("blue", "red", "black"), lty = 1)
+```
+- ME (Mean Error): Measures the average forecast error. Values close to 0 are preferable.
+- RMSE (Root Mean Squared Error): Gives the standard deviation of the residuals, measuring how far the data points are from the model's predicted values. Lower values indicate a better fit.
+- MAE (Mean Absolute Error): Similar to RMSE but uses absolute differences. It's easier to interpret than RMSE as it's on the same scale as the data.
+- MPE (Mean Percentage Error): Measures the average percentage error. This helps understand the error in terms of percentage.
+- MAPE (Mean Absolute Percentage Error): Like MPE but uses absolute values. This is useful for comparing the forecast performance across different datasets.
+- MASE (Mean Absolute Scaled Error): Compares the MAE to the MAE of a naïve benchmark model. Values less than one indicate a model performing better than the naïve model.
+- ACF1 (First Autocorrelation of Errors): Measures the correlation between the forecast errors and their lag. Values close to 0 indicate good model fit.
+
+
