@@ -73,7 +73,7 @@ Let's now check that the information makes sense / it was joined properly. We wi
 ```{r}
 df_analysis_baq <- df_analysis %>%
   filter(city == "BARRANQUILLA A.M.", Concepto == "Ocupados") %>%
-  select(city, Concepto, city_id, date, year, month, workers, population_month, population_year, CPI, CPI_month_var, CPI_year_var, CPI_year_to_date_var)
+  select(city, Concepto, date, workers, population_month, population_year, CPI, CPI_month_var, CPI_year_var, CPI_year_to_date_var)
 
 # Round the column of workers so they are integers
 df_analysis_baq$workers <- round(df_analysis_baq$workers,0)

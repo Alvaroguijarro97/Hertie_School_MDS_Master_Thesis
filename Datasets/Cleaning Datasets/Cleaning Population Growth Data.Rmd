@@ -99,6 +99,7 @@ data_2020_2035_c_joined <- data_2020_2035_c_joined %>%
 unique(data_2020_2035_c_joined$ciudad_am)
 names(data_2020_2035_c_joined)
 ```
+
 Now let's do the same with the "2005_2019" dataset.
 ```{r clean 2}
 # Set the names of the dataset's columns to the values in row 6
@@ -143,6 +144,7 @@ unique(data_2005_2019_c_joined$ciudad_am)
 names(data_2005_2019_c_joined)
 ```
 Check that both datasets have the same columns and correct information. 
+
 ```{r}
 head(data_2005_2019_c_joined)
 head(data_2020_2035_c_joined)
@@ -236,6 +238,7 @@ filtered_monthly_data$date <- format(as.POSIXct(filtered_monthly_data$date), "%Y
 
 str(filtered_monthly_data)
 ```
+
 ```{r add column for monthly information}
 annual_population <- final_joint_data_2005_2035 %>%
   select(city_id, year, population)
