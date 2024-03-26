@@ -1,0 +1,280 @@
+---
+title: "Untitled"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries, include=Fase}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(plotly)
+library(lubridate)
+library(ggplot2)
+library(forecast)
+library(stats)
+library(tseries)
+library(zoo)
+library(writexl)
+```
+```{r}
+getwd()
+```
+```{r read datasets}
+I_PM <- read_excel("pobreza_monetaria_18_departamentos_2012_2022.xlsx", sheet = "IP Act.Met.") 
+#Incidencia de la Pobreza Monetaria, valores en % / Monetary Poverty Rate, values in %
+I_PME <- read_excel("pobreza_monetaria_18_departamentos_2012_2022.xlsx", sheet = "IPE Act.Met.") 
+#Incidencia de la Pobreza Monetaria Extrema, valores en % / Extreme Monetary Poverty Rate, values in %
+Gini <- read_excel("pobreza_monetaria_18_departamentos_2012_2022.xlsx", sheet = "Gini") 
+#Coeficiente de Gini / Gini Coefficient
+IPUG <- read_excel("pobreza_monetaria_18_departamentos_2012_2022.xlsx", sheet = "IPUG")
+#Promedio del Ingreso per cápita de la unidad de gasto de la población, Valores en Pesos Corrientes / Average Per Capita Income of the Household Spending Unit, Values in Current Pesos
+LP <- read_excel("pobreza_monetaria_18_departamentos_2012_2022.xlsx", sheet = "LP Act.Met.") 
+#Líneas de Pobreza Monetaria (valores mensuales por persona), Valores en Pesos Corrientes / Monetary Poverty Lines (monthly values per person), Values in Current Pesos
+LPE <- read_excel("pobreza_monetaria_18_departamentos_2012_2022.xlsx", sheet = "LPE Act.Met.") 
+#Líneas de Pobreza Monetaria Extrema (valores mensuales por persona), Valores en Pesos Corrientes / Extreme Monetary Poverty Lines (monthly values per person), Values in Current Pesos
+```
+
+```{r transform datasets into a long format and join into one}
+# Transform and combine data frames
+datasets_list <- list(I_PM = I_PM, I_PME = I_PME, Gini = Gini, IPUG = IPUG, LP = LP, LPE = LPE)
+
+# A function to transform each data frame from wide to long format
+transform_data <- function(df, name) {
+  df %>%
+    pivot_longer(
+      cols = -Departamento, 
+      names_to = "Año", 
+      values_to = name
+    ) %>%
+    mutate(Año = parse_number(Año)) # Convert year column to numeric
+}
+
+# Apply the transformation function to each data frame
+long_datasets <- lapply(names(datasets_list), function(name) {
+  transform_data(datasets_list[[name]], name)
+})
+
+# Combine all transformed data frames
+combined_data <- reduce(long_datasets, full_join, by = c("Departamento", "Año"))
+
+# Inspect the combined data
+print(combined_data)
+```
+Let's now set change the column names to english and for them to match our main analysis dataset. Will also proceed to change the name of each of the states to its capital city, since we are asuming that the values analyzed here will be the same for both. 
+
+```{r}
+unique(combined_data$Departamento)
+cleaned_dataset <- combined_data %>%
+  filter(Departamento %in% c("Antioquia","Atlántico","Bogotá D.C.","Bolívar","Caldas","Córdoba","Meta","Nariño","Norte de Santander","Risaralda","Santander","Tolima","Valle del Cauca"), Año %in% c(2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022))
+
+municipio_transform <- c(
+  "Atlántico" = "BARRANQUILLA A.M.",
+  "Bogotá D.C." = "BOGOTÁ D.C.",
+  "Santander" = "BUCARAMANGA A.M.",
+  "Valle del Cauca" = "CALI A.M.",
+  "Bolívar" = "CARTAGENA",
+  "Norte de Santander" = "CÚCUTA A.M.",
+  "Tolima" = "IBAGUÉ",
+  "Caldas" = "MANIZALES A.M.",
+  "Antioquia" = "MEDELLÍN A.M.",
+  "Córdoba" = "MONTERÍA",
+  "Nariño" = "PASTO",
+  "Risaralda" = "PEREIRA A.M.",
+  "Meta" = "VILLAVICENCIO")
+cleaned_dataset <- cleaned_dataset %>%
+  mutate(Departamento = recode(Departamento, !!!municipio_transform))  %>%
+  arrange(Departamento, Año) %>%
+  rename( year = Año,
+          city = Departamento)
+
+head(cleaned_dataset)
+colnames(cleaned_dataset)
+```
+```{r check NA's}
+na_counts <- cleaned_dataset %>%
+  summarise_all(~sum(is.na(.)))
+
+# Print the NA counts
+print(na_counts)
+```
+```{r}
+# Function to interpolate all specified columns for a single city
+interpolate_city <- function(data_city, columns_to_interpolate) {
+  if (nrow(data_city) > 0) {
+    # Assume city name and city_id are the same for all rows, as it's grouped
+    city_name <- unique(data_city$city)[1]
+    
+    # Create an annual time series with NA handling
+    annual_dates <- as.Date(paste(data_city$year, "-12-01", sep = ""))
+    
+    # Create a sequence of monthly dates from the start to the end of the series
+    monthly_dates <- seq(from = min(annual_dates), to = max(annual_dates), by = "1 month")
+    
+    # Initialize the monthly data with the correct number of rows
+    monthly_data <- data.frame(
+      city = rep(city_name, length(monthly_dates)),
+      date = monthly_dates,
+      year = format(monthly_dates, "%Y"),
+      month = format(monthly_dates, "%m")
+    )
+    
+    for (col in columns_to_interpolate) {
+      # Create an annual time series for the current column
+      annual_series <- zoo(data_city[[col]], order.by = annual_dates)
+      
+      # Use na.approx only on the interior NAs and not on leading/trailing NAs
+      annual_series <- na.approx(annual_series, na.rm = FALSE)
+      
+      # Perform spline interpolation
+      monthly_series <- na.spline(annual_series, xout = monthly_dates)
+      
+      # Ensure that interpolated values are not negative
+      monthly_series[monthly_series < 0] <- 0
+      
+      # Add the monthly series to the monthly data
+      monthly_data[[col]] <- coredata(monthly_series)
+    }
+    
+    return(monthly_data)
+  } else {
+    return(data.frame()) # Return an empty data.frame if there is no data
+  }
+}
+
+# Define the columns to interpolate
+columns_to_interpolate <- c("I_PM","I_PME","Gini","IPUG","LP","LPE")
+
+# Apply the interpolation to each city and combine the results
+monthly_data <- cleaned_dataset %>%
+  group_by(city) %>%
+  group_map(~interpolate_city(.x, columns_to_interpolate), .keep = TRUE) %>%
+  bind_rows()
+
+#Filter the data by date range
+monthly_data <- monthly_data %>%
+   filter(date >= as.Date("2010-12-01") & date <= as.Date("2023-12-31"))
+head(monthly_data)
+```
+Let's plot the different variables:
+```{r}
+# Create the interactive plot directly with plotly
+plotly_obj <- plot_ly(data = monthly_data, x = ~date, y = ~I_PM, 
+                      color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+                      type = 'scatter', mode = 'lines+markers',
+                      text = ~city, hoverinfo = 'text+x+y') %>%
+  layout(title = "Monetary Poverty Rate by City from 2012 to 2022",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Monetary Poverty Rate, values in %", tickformat = ",d", 
+                      range = c(0, max(monthly_data$I_PM, na.rm = TRUE))),
+         legend = list(orientation = "v", x = 1.05, y = 1))
+
+# Display the interactive plot
+plotly_obj
+```
+
+```{r}
+# Define the list of variables to loop over
+variables_list <- c("I_PM","I_PME","Gini","IPUG","LP","LPE")
+
+# Loop over each variable and create a plot
+plot_list <- lapply(variables_list, function(variable) {
+  y_title <- paste("", gsub("_", " ", variable))
+  plot_title <- paste(y_title, "by City from 2011 to 2022")
+  
+  plot_ly(data = monthly_data, x = ~date, y = as.formula(paste0("~`", variable, "`")),
+          color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+          type = 'scatter', mode = 'lines+markers',
+          text = ~city, hoverinfo = 'text+x+y') %>%
+    layout(title = plot_title,
+           xaxis = list(title = "Year"),
+           yaxis = list(title = y_title, tickformat = ",dd",
+                        range = c(0, max(monthly_data[[variable]], na.rm = TRUE))),
+           legend = list(orientation = "v", x = 1.05, y = 1))
+})
+
+# Print the plots
+for (plot in plot_list) {
+  print(plot)
+}
+```
+
+Let's identify the different end of the year data points to see how did the interpolation went like.
+
+```{r}
+# Add a new column to identify December months
+monthly_data$Is_December <- format(monthly_data$date, "%m") == "12"
+
+# Define the list of variables to loop over
+variables_list <- c("I_PM","I_PME","Gini","IPUG","LP","LPE")
+
+# Loop over each variable and create a plot
+plot_list <- lapply(variables_list, function(variable) {
+  # Filter the dataset for the variable
+  data_variable <- monthly_data %>%
+    select(city, date, value = .data[[variable]], Is_December)
+  
+  # Start the plot with non-December data
+  p <- plot_ly(data = data_variable %>% filter(!Is_December), 
+               x = ~date, y = ~value, 
+               color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+               type = 'scatter', mode = 'lines+markers',
+               text = ~city, hoverinfo = 'text+x+y') 
+  
+  # Add December data with black outlines
+  p <- add_trace(p, data = data_variable %>% filter(Is_December), 
+                 x = ~date, y = ~value,
+                 marker = list(line = list(color = 'black', width = 2)),
+                 type = 'scatter', mode = 'markers')
+
+  # Layout settings
+  p <- layout(p,
+              title = paste("Monthly", gsub("_", " ", variable), "Evolution by City"),
+              xaxis = list(title = "Date"),
+              yaxis = list(title = paste(gsub("_", " ", variable)),
+                        range = c(0, max(monthly_data[[variable]], na.rm = TRUE))),
+              legend = list(orientation = 'v', x = 1.05, y = 1))
+  
+  return(p)
+})
+
+# Print the plots
+for (plot in plot_list) {
+  print(plot)
+}
+```
+
+```{r prepare for exporting}
+# Define the columns to be transformed to percentages
+percentage_columns <- c("I_PM","I_PME")
+
+# Transform the columns to percentages and set their type to double
+final_monthly_data <- monthly_data %>%
+  mutate(across(all_of(percentage_columns), ~ .x / 100, .names = "{.col}")) %>%
+  mutate(across(all_of(percentage_columns), as.double, .names = "{.col}")) %>%
+  # Format the date column to character with "%Y-%m" format
+  mutate(date = format(date, "%Y-%m")) %>%
+  # Select all columns except "Is_December"
+  select(-Is_December)
+
+# Print the head of the dataset to check the changes
+head(final_monthly_data)
+```
+
+```{r export dataset}
+# Extract the minimum and maximum dates from the dataset
+min_date <- min(final_monthly_data$date)
+max_date <- max(final_monthly_data$date)
+
+# Create the filename using the min and max dates
+filename <- paste0("Monetary_Poverty_", min_date, "-", max_date, ".xlsx")
+
+# Write the dataframe to an Excel file
+write_xlsx(final_monthly_data, filename)
+```
