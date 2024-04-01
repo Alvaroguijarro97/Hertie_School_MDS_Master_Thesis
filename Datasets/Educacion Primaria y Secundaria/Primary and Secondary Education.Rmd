@@ -114,20 +114,25 @@ interpolate_city <- function(data_city, columns_to_interpolate) {
     )
     
     for (col in columns_to_interpolate) {
+      # Get the original non-NA values to enforce the min/max for interpolation
+      original_values <- na.omit(data_city[[col]])
+      min_val <- min(original_values)
+      max_val <- max(original_values)
+      
       # Create an annual time series for the current column
       annual_series <- zoo(data_city[[col]], order.by = annual_dates)
       
-      # Use na.approx only on the interior NAs and not on leading/trailing NAs
-      annual_series <- na.approx(annual_series, na.rm = FALSE)
+      # Use na.approx to fill in leading/trailing NAs linearly
+      annual_series_filled <- na.approx(annual_series, x = annual_dates, method = "linear", na.rm = FALSE)
       
-      # Perform spline interpolation
-      monthly_series <- na.spline(annual_series, xout = monthly_dates)
+      # Perform spline interpolation with boundaries
+      spline_interpolated <- spline(annual_dates, annual_series_filled, xout = monthly_dates, method = "fmm")$y
       
-      # Ensure that interpolated values are not negative
-      monthly_series[monthly_series < 0] <- 0
+      # Enforce the min/max bounds
+      monthly_series <- pmax(pmin(spline_interpolated, max_val), min_val)
       
       # Add the monthly series to the monthly data
-      monthly_data[[col]] <- coredata(monthly_series)
+      monthly_data[[col]] <- monthly_series
     }
     
     return(monthly_data)

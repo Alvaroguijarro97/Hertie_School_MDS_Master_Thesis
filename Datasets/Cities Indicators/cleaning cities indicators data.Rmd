@@ -1,0 +1,352 @@
+---
+title: "Untitled"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(readxl)
+library(writexl)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(plotly)
+library(zoo)
+library(tidyr)
+library(purrr)
+library(lubridate)
+library(stringr)
+```
+
+```{r read datasets}
+file_path <- "Indicadores de Municipios 2016-2021.xlsx"
+# Read the names of the sheets (one for each city)
+sheet_names  <- excel_sheets(file_path)
+```
+
+```{r}
+# Function to clean and convert the year columns
+clean_convert <- function(x) {
+  x <- gsub("\\$", "", x) # Remove dollar signs
+  x <- gsub("%", "", x) # Remove percentage signs
+  x <- gsub(",", "", x) # Remove commas
+  x <- as.numeric(x) # Convert to numeric
+  return(x)
+}
+```
+
+```{r}
+
+# Function to read and transform each sheet
+read_and_transform_sheet <- function(sheet_name, file_path) {
+  sheet_data <- read_excel(file_path, sheet = sheet_name)
+  
+  # Clean and convert year columns before pivot_longer
+  for(col in names(sheet_data)[2:7]) { # Assuming the first column is 'Variables' and the next six are years
+    sheet_data[[col]] <- sapply(sheet_data[[col]], clean_convert)
+  }
+  
+  # Adding 'city' column and transforming from wide to long format
+  sheet_data <- sheet_data %>%
+    mutate(city = sheet_name) %>%
+    pivot_longer(
+      cols = -c(Variables, city), 
+      names_to = "year", 
+      values_to = "value"
+    ) %>%
+    rename(variable = Variables)
+  
+  return(sheet_data)
+}
+
+# Read the names of the sheets (one for each city)
+sheet_names <- excel_sheets("Indicadores de Municipios 2016-2021.xlsx")
+
+# Read and transform all sheets
+all_data <- lapply(sheet_names, read_and_transform_sheet, file_path = "Indicadores de Municipios 2016-2021.xlsx")
+
+# Combine all data frames into one
+combined_data <- bind_rows(all_data)
+
+# Check the combined data
+head(combined_data)
+```
+```{r}
+# Transform the combined dataset from long to wide format
+wide_data <- combined_data %>%
+  pivot_wider(
+    names_from = variable, # Use the 'variable' column to define new column names
+    values_from = value # The values to fill the new columns
+  )
+
+# Optionally, you might want to arrange the columns in a specific order
+wide_data <- wide_data %>%
+  select(city, year, sort(names(.))[!names(.) %in% c("city", "year")])
+
+# Check the structure of the wide data
+str(wide_data)
+
+# View the first few rows of the wide format dataset
+head(wide_data)
+```
+Identify what columns have NA's and not select them, then set each of the variales into their right data type. 
+```{r}
+cleaned_dataset <- wide_data %>%
+  select(city, year, where(~ !any(is.na(.))))
+colnames(cleaned_dataset)
+unique(cleaned_dataset$city)
+
+municipio_transform <- c(
+  "Barranquilla" = "BARRANQUILLA A.M.",
+  "Bogotá D.C." = "BOGOTÁ D.C.",
+  "Bucaramanga" = "BUCARAMANGA A.M.",
+  "Cali" = "CALI A.M.",
+  "Cartagena" = "CARTAGENA",
+  "Cúcuta" = "CÚCUTA A.M.",
+  "Ibagué" = "IBAGUÉ",
+  "Manizales" = "MANIZALES A.M.",
+  "Medellín" = "MEDELLÍN A.M.",
+  "Montería" = "MONTERÍA",
+  "Pasto" = "PASTO",
+  "Pereira" = "PEREIRA A.M.",
+  "Villavicencio" = "VILLAVICENCIO")
+
+cleaned_dataset <- cleaned_dataset %>%
+  mutate(city = recode(city, !!!municipio_transform))  %>%
+  arrange(city, year) %>%
+ rename(
+    MDM_Resource_Mobilization = `1. Movilización de recursos`, # Measures mobilization of financial resources
+    Tax_And_Non_Tax_Revenue_Per_Capita = `Ingreso tributario y no tributario sin recaudo OT per cápita`, # Tax and non-tax revenue per capita, excluding territorial order collections
+    Revenue_From_OT_Instruments_Per_Capita = `Ingreso tributario por instrumentos de OT per cápita`, # Revenue collected through territorial ordering instruments per capita
+    Investment_Financed_By_Own_Resources = `% de inversión financiada con recursos propios`, # Percentage of investment financed by the municipality's own resources
+    MDM_Execution_Of_Resources = `2. Ejecución de recursos*`, # Execution of financial resources
+    MDM_Open_Government_And_Transparency = `3. Gobierno abierto y transparencia`, # Measures of open government and transparency practices
+    Information_Organization = `Organización de la información`, # Implementation of information organization as per Law 594 of 2000
+    Accountability = `Rendición de cuentas`, # Evaluates mechanisms for citizen participation and public administration accountability
+    CitizenService = `Atención al ciudadano`, # Evaluates the level of compliance with basic provisions for citizen service and attention
+    MDM_Territorial_Ordering = `4. Ordenamiento territorial`, # Territorial ordering and planning measures
+    Effective_Collection_Rate = `Tasa efectiva de recaudo`, # Effective rate of tax collection
+    OT_Instruments_Use_Percentage = `% Uso de instrumentos OT`, # Percentage use of territorial ordering instruments
+    MDM_Education = `1. Educación`, # Educational coverage and quality in middle education
+    Middle_Education_Net_Coverage = `Cobertura neta en educación media`, # Net coverage rate in middle education
+    Average_Score_Saber_11_Math = `Puntaje promedio prueba Saber 11 - Matemáticas`, # Average score in the math section of the Saber 11 tests
+    Average_Score_Saber_11_Language = `Puntaje promedio prueba Saber 11 - Lenguaje`, # Average score in the language section of the Saber 11 tests
+    Transition_Education_Net_Coverage = `Cobertura neta en educación transición`, # Net coverage rate in transition education
+    MDM_Health_Coverage = `2. Salud`, # Health coverage and services
+    Health_Coverage_Overall = `Cobertura en salud`, # Overall health coverage from the affiliate registry
+    Pentavalent_Vaccination_Coverage = `Cobertura en vacunación pentavalente`, # Coverage rate of the pentavalent vaccine in infants
+    Infant_Mortality_Rate = `Tasa de mortalidad infantil`, # Infant mortality rate per 1,000 live births
+    MDM_Services = `3. Servicios`, # Coverage and quality of public services
+    Rural_Electrical_Coverage = `Cobertura en energía eléctrica rural`, # Coverage of rural electrical service
+    Broadband_Penetration = `Petración de la banda ancha`, # Number of broadband Internet subscribers relative to the total population
+    Aqueduct_Coverage = `Cobertura en acueducto`, # Coverage of aqueduct water service
+    Sewerage_Coverage = `Cobertura en alcantarillado`, # Coverage of sewerage service
+    MDM_Security_And_Coexistence = `4. Seguridad y convivencia`, # Security and social coexistence indicators
+    Theft_Rate_Per_10k_Inhabitants = `Tasa de hurtos por 10.000 habitantes`, # Reported theft cases per 10,000 inhabitants
+    Homicide_Rate_Per_10k_Inhabitants = `Tasa de homicidios por 10.000 habitantes`, # Homicide cases per 10,000 inhabitants
+    Domestic_Violence_Rate_Per_10k_Inhabitants = `Tasa de casos de violencia intrafamiliar por 10.000 habitantes` # Domestic violence cases per 10,000 inhabitants
+  ) %>%
+  select(city, year,
+        MDM_Resource_Mobilization, 
+        Tax_And_Non_Tax_Revenue_Per_Capita, 
+        Revenue_From_OT_Instruments_Per_Capita,
+        Investment_Financed_By_Own_Resources,
+        MDM_Execution_Of_Resources,
+        MDM_Open_Government_And_Transparency,
+        Information_Organization,
+        Accountability,
+        CitizenService,
+        MDM_Territorial_Ordering,
+        Effective_Collection_Rate, 
+        OT_Instruments_Use_Percentage,
+        MDM_Education,
+        Middle_Education_Net_Coverage,
+        Average_Score_Saber_11_Math,
+        Average_Score_Saber_11_Language,
+        Transition_Education_Net_Coverage, 
+        MDM_Health_Coverage, 
+        Health_Coverage_Overall, 
+        Pentavalent_Vaccination_Coverage, 
+        Infant_Mortality_Rate,
+        MDM_Services,
+        Rural_Electrical_Coverage,
+        Broadband_Penetration,
+        Aqueduct_Coverage, 
+        Sewerage_Coverage, 
+        MDM_Security_And_Coexistence, 
+        Theft_Rate_Per_10k_Inhabitants, 
+        Homicide_Rate_Per_10k_Inhabitants,
+        Domestic_Violence_Rate_Per_10k_Inhabitants)
+
+colnames(cleaned_dataset)
+```
+```{r visualize the data}
+# Define the list of variables to loop over
+variables_list <- c("MDM_Resource_Mobilization","Tax_And_Non_Tax_Revenue_Per_Capita","Revenue_From_OT_Instruments_Per_Capita","Investment_Financed_By_Own_Resources","MDM_Execution_Of_Resources","MDM_Open_Government_And_Transparency","Information_Organization","Accountability","CitizenService","MDM_Territorial_Ordering","Effective_Collection_Rate","OT_Instruments_Use_Percentage","MDM_Education","Middle_Education_Net_Coverage","Average_Score_Saber_11_Math","Average_Score_Saber_11_Language","Transition_Education_Net_Coverage","MDM_Health_Coverage","Health_Coverage_Overall","Pentavalent_Vaccination_Coverage","Infant_Mortality_Rate","MDM_Services","Rural_Electrical_Coverage","Broadband_Penetration","Aqueduct_Coverage","Sewerage_Coverage","MDM_Security_And_Coexistence","Theft_Rate_Per_10k_Inhabitants","Homicide_Rate_Per_10k_Inhabitants","Domestic_Violence_Rate_Per_10k_Inhabitants")
+
+# Loop over each variable and create a plot
+plot_list <- lapply(variables_list, function(variable) {
+  # Filter the dataset for the variable
+  data_variable <- cleaned_dataset %>%
+    select(city, year, value = .data[[variable]])
+  
+  # Start the plot with non-December data
+  p <- plot_ly(data = data_variable, 
+               x = ~year, y = ~value, 
+               color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+               type = 'scatter', mode = 'lines+markers',
+               text = ~city, hoverinfo = 'text+x+y') 
+
+  # Layout settings
+  p <- layout(p,
+              title = paste(gsub("_", " ", variable), "Evolution by City"),
+              xaxis = list(title = "Date"),
+              yaxis = list(title = paste(gsub("_", " ", variable)),
+                        range = c(0, max(cleaned_dataset[[variable]], na.rm = TRUE))),
+              legend = list(orientation = 'v', x = 1.05, y = 1))
+  
+  return(p)
+})
+
+# Print the plots
+for (plot in plot_list) {
+  print(plot)
+}
+```
+
+Select only variables that interest us and show an stable evolution / the data makes sense.
+
+```{r}
+cleaned_dataset_f <- cleaned_dataset %>%
+  select("city", "year","MDM_Resource_Mobilization","Tax_And_Non_Tax_Revenue_Per_Capita","Revenue_From_OT_Instruments_Per_Capita","Investment_Financed_By_Own_Resources","MDM_Execution_Of_Resources","MDM_Open_Government_And_Transparency","MDM_Territorial_Ordering","Effective_Collection_Rate", "MDM_Education", "MDM_Health_Coverage","Health_Coverage_Overall","Pentavalent_Vaccination_Coverage","Infant_Mortality_Rate","MDM_Services","Rural_Electrical_Coverage","Broadband_Penetration","Aqueduct_Coverage","Sewerage_Coverage","MDM_Security_And_Coexistence","Theft_Rate_Per_10k_Inhabitants","Homicide_Rate_Per_10k_Inhabitants","Domestic_Violence_Rate_Per_10k_Inhabitants")
+
+```
+
+Interpolate data for monthly frequency
+```{r}
+interpolate_city <- function(data_city, columns_to_interpolate) {
+  if (nrow(data_city) > 0) {
+    city_name <- unique(data_city$city)[1]
+    annual_dates <- as.Date(paste(data_city$year, "-12-01", sep = ""))
+    monthly_dates <- seq(from = min(annual_dates), to = max(annual_dates), by = "1 month")
+    
+    # Initialize the monthly data with the correct number of rows
+    monthly_data <- data.frame(
+      city = rep(city_name, length(monthly_dates)),
+      date = monthly_dates,
+      year = format(monthly_dates, "%Y"),
+      month = format(monthly_dates, "%m")
+    )
+    
+    for (col in columns_to_interpolate) {
+      # Get the original values and set min/max for interpolation
+      original_values <- na.omit(data_city[[col]])
+      min_val <- min(original_values)
+      max_val <- max(original_values)
+      
+      # Create an annual time series for the current column
+      annual_series <- zoo(data_city[[col]], order.by = annual_dates)
+      
+      # Use na.approx for initial NA interpolation
+      annual_series <- na.approx(annual_series, na.rm = FALSE)
+      
+      # Perform spline interpolation with boundaries
+      monthly_series <- spline(annual_dates, annual_series, xout = monthly_dates, method = "fmm")$y
+      
+      # Apply min/max constraints
+      monthly_series <- pmax(pmin(monthly_series, max_val), min_val)
+      
+      # Add the monthly series to the monthly data
+      monthly_data[[col]] <- monthly_series
+    }
+    
+    return(monthly_data)
+  } else {
+    return(data.frame()) # Return an empty data.frame if there is no data
+  }
+}
+
+
+# Define the columns to interpolate
+columns_to_interpolate <- c("MDM_Resource_Mobilization","Tax_And_Non_Tax_Revenue_Per_Capita","Revenue_From_OT_Instruments_Per_Capita","Investment_Financed_By_Own_Resources","MDM_Execution_Of_Resources","MDM_Open_Government_And_Transparency","MDM_Territorial_Ordering","Effective_Collection_Rate", "MDM_Education", "MDM_Health_Coverage","Health_Coverage_Overall","Pentavalent_Vaccination_Coverage","Infant_Mortality_Rate","MDM_Services","Rural_Electrical_Coverage","Broadband_Penetration","Aqueduct_Coverage","Sewerage_Coverage","MDM_Security_And_Coexistence","Theft_Rate_Per_10k_Inhabitants","Homicide_Rate_Per_10k_Inhabitants","Domestic_Violence_Rate_Per_10k_Inhabitants")
+
+# Apply the interpolation to each city and combine the results
+monthly_data <- cleaned_dataset_f %>%
+  group_by(city) %>%
+  group_map(~interpolate_city(.x, columns_to_interpolate), .keep = TRUE) %>%
+  bind_rows()
+
+#Filter the data by date range
+head(monthly_data)
+```
+```{r}
+# Add a new column to identify December months
+monthly_data$Is_December <- format(monthly_data$date, "%m") == "12"
+
+# Define the list of variables to loop over
+variables_list <- columns_to_interpolate
+
+# Loop over each variable and create a plot
+plot_list <- lapply(variables_list, function(variable) {
+  # Filter the dataset for the variable
+  data_variable <- monthly_data %>%
+    select(city, date, value = .data[[variable]], Is_December)
+  
+  # Start the plot with non-December data
+  p <- plot_ly(data = data_variable %>% filter(!Is_December), 
+               x = ~date, y = ~value, 
+               color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+               type = 'scatter', mode = 'lines+markers',
+               text = ~city, hoverinfo = 'text+x+y') 
+  
+  # Add December data with black outlines
+  p <- add_trace(p, data = data_variable %>% filter(Is_December), 
+                 x = ~date, y = ~value,
+                 marker = list(line = list(color = 'black', width = 2)),
+                 type = 'scatter', mode = 'markers')
+
+  # Layout settings
+  p <- layout(p,
+              title = paste("Monthly", gsub("_", " ", variable), "Evolution by City"),
+              xaxis = list(title = "Date"),
+              yaxis = list(title = paste(gsub("_", " ", variable)),
+                        range = c(0, max(monthly_data[[variable]], na.rm = TRUE))),
+              legend = list(orientation = 'v', x = 1.05, y = 1))
+  
+  return(p)
+})
+
+# Print the plots
+for (plot in plot_list) {
+  print(plot)
+}
+```
+```{r}
+final_monthly_data <- monthly_data %>%
+  mutate(date = format(date, "%Y-%m")) %>%
+  # Select all columns except "Is_December"
+  select(-Is_December)
+
+# Print the head of the dataset to check the changes
+head(final_monthly_data)
+```
+
+```{r export dataset}
+# Extract the minimum and maximum dates from the dataset
+min_date <- min(final_monthly_data$date)
+max_date <- max(final_monthly_data$date)
+
+# Create the filename using the min and max dates
+filename <- paste0("Cities_Indicators_cleaned_", min_date, "-", max_date, ".xlsx")
+
+# Write the dataframe to an Excel file
+write_xlsx(final_monthly_data, filename)
+```

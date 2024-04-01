@@ -154,7 +154,7 @@ plot_list <- lapply(variables_list, function(variable) {
 
   # Layout settings
   p <- layout(p,
-              title = paste("Monthly", gsub("_", " ", variable), "Evolution by City"),
+              title = paste(gsub("_", " ", variable), "Evolution by City"),
               xaxis = list(title = "Date"),
               yaxis = list(title = paste(gsub("_", " ", variable)),
                         range = c(0, max(oec_municipios_filtered[[variable]], na.rm = TRUE))),
@@ -175,16 +175,10 @@ Let's Interpolate the data to have it in a monthly basis
 # Function to interpolate all specified columns for a single city
 interpolate_city <- function(data_city, columns_to_interpolate) {
   if (nrow(data_city) > 0) {
-    # Assume city name and city_id are the same for all rows, as it's grouped
     city_name <- unique(data_city$city)[1]
-    
-    # Create an annual time series with NA handling
     annual_dates <- as.Date(paste(data_city$year, "-12-01", sep = ""))
-    
-    # Create a sequence of monthly dates from the start to the end of the series
     monthly_dates <- seq(from = min(annual_dates), to = max(annual_dates), by = "1 month")
     
-    # Initialize the monthly data with the correct number of rows
     monthly_data <- data.frame(
       city = rep(city_name, length(monthly_dates)),
       date = monthly_dates,
@@ -193,20 +187,25 @@ interpolate_city <- function(data_city, columns_to_interpolate) {
     )
     
     for (col in columns_to_interpolate) {
+      # Get the original non-NA values to enforce the min/max for interpolation
+      original_values <- na.omit(data_city[[col]])
+      min_val <- min(original_values)
+      max_val <- max(original_values)
+      
       # Create an annual time series for the current column
       annual_series <- zoo(data_city[[col]], order.by = annual_dates)
       
-      # Use na.approx only on the interior NAs and not on leading/trailing NAs
-      annual_series <- na.approx(annual_series, na.rm = FALSE)
+      # Use na.approx to fill in leading/trailing NAs linearly
+      annual_series_filled <- na.approx(annual_series, x = annual_dates, method = "linear", na.rm = FALSE)
       
       # Perform spline interpolation
-      monthly_series <- na.spline(annual_series, xout = monthly_dates)
+      spline_interpolated <- spline(annual_dates, annual_series_filled, xout = monthly_dates, method = "fmm")$y
       
-      # Ensure that interpolated values are not negative
-      monthly_series[monthly_series < 0] <- 0
+      # Enforce the min/max bounds
+      monthly_series <- pmax(pmin(spline_interpolated, max_val), min_val)
       
       # Add the monthly series to the monthly data
-      monthly_data[[col]] <- coredata(monthly_series)
+      monthly_data[[col]] <- monthly_series
     }
     
     return(monthly_data)
@@ -306,7 +305,6 @@ for (plot in plot_list) {
 ```
 
 ```{r}
-# Transform the columns to percentages and set their type to double
 final_monthly_data <- monthly_data %>%
   mutate(date = format(date, "%Y-%m")) %>%
   # Select all columns except "Is_December"

@@ -1,0 +1,27 @@
+---
+title: "Cleaning IPC"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(RColorBrewer)
+library(plotly)
+library(stringdist)
+library(scales)
+```
+
+```{r}
+#Read Excel file and identify the working sheets.
+file_path <- "1.2.4.IPC_Por ciudad_IQY.xlsx" 
+sheet_names <- excel_sheets(file_path)
+```
+

@@ -1,0 +1,289 @@
+---
+title: "Joining_Datasets"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+This R script is used to clean and structure the Population Data for later analytical use. The data was adquired from DANE. 
+
+```{r libraries}
+# Load libraries
+library(readxl)
+library(writexl)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(plotly)
+library(zoo)
+library(tidyr)
+library(purrr)
+```
+
+```{r}
+setwd("C:/Users/alvar/OneDrive/Documents/GitHub/Hertie_School_MDS_Master_Thesis/Datasets")
+```
+
+
+```{r files}
+# Use file.choose() to interactively select the Excel files
+file_path1 <- "DCD-area-proypoblacion-Mun-2020-2035-ActPostCOVID-19.xlsx" #DCD-area-proypoblacion-Mun-2020-2035-ActPostCOVID-19
+file_path2 <- "DCD-area-proypoblacion-Mun-2005-2019.xlsx" #DCD-area-proypoblacion-Mun-2005-2019
+file_path3 <- "Ciudades_y_sus_Areas_Metropolitanas_en_GEIH.xlsx" #Ciudades y sus Areas Metropolitanas en GEIH (to standarize names)
+
+# Read the selected Excel files
+data_2020_2035 <- read_excel(file_path1)
+data_2005_2019 <- read_excel(file_path2)
+official_city_names <- read_excel(file_path3)
+```
+
+Let's identify which are the cities we are going to join our population database with our worker's database
+```{r citynames}
+# Filter the dataset for rows where the "Tipo" column is "principal"
+main_cities <- official_city_names %>%
+  filter(Tipo == "principal")
+main_cities
+
+```
+
+```{r head}
+# Display the first 10 rows of the first document
+head(data_2020_2035, n = 10)
+summary(data_2020_2035)
+
+# Display the first 10 rows of the second document
+head(data_2005_2019, n = 10)
+summary(data_2005_2019)
+```
+Let's proceed to clean the first dataset, data_2020_2035.
+```{r clean 1}
+# Set the names of the dataset's columns to the values in row 6
+col_names <- data_2020_2035[6, ] # Get the 6th row to use as column names
+names(data_2020_2035) <- col_names # Set the column names
+
+# Delete the first 6 rows of the document
+data_2020_2035_c <- data_2020_2035[-(1:6), ]
+
+# Filter by column "ÁREA GEOGRÁFICA" for rows that contain "Total"
+data_2020_2035_c <- data_2020_2035_c[data_2020_2035_c$`ÁREA GEOGRÁFICA` == "Total", ]
+
+# Convert to a data frame if it's not already (since we may have a tibble or similar)
+data_2020_2035_c <- as.data.frame(data_2020_2035_c)
+
+# Set variable types
+data_2020_2035_c$AÑO <- as.integer(data_2020_2035_c$AÑO)
+data_2020_2035_c$Población <- as.integer(data_2020_2035_c$Población)
+
+# Reset row numbering
+rownames(data_2020_2035_c) <- NULL
+
+# View the cleaned dataset
+head(data_2020_2035_c)
+```
+Let's join the information from this dataset with "main_cities" to get the same name format and ID of the cities from our workers main database. 
+```{r add cities id info to 2020-2035}
+# Ensure that cod_dane_mun is character so that we can add leading zeroes
+main_cities$cod_dane_mun <- sprintf("%05d", as.integer(main_cities$cod_dane_mun))
+
+# Ensure that MPIO is also character for consistency before the join
+data_2020_2035_c$MPIO <- as.character(data_2020_2035_c$MPIO)
+
+# Perform the inner join
+data_2020_2035_c_joined <- inner_join(data_2020_2035_c, main_cities, by = c("MPIO" = "cod_dane_mun"))
+
+# Now, filter the dataset to only include rows with "principal" or non-NA in the "Tipo" column
+data_2020_2035_c_joined <- data_2020_2035_c_joined %>%
+  filter(!is.na(Tipo) & Tipo == "principal")
+
+# View the first few rows of the joined and filtered dataset
+unique(data_2020_2035_c_joined$ciudad_am)
+names(data_2020_2035_c_joined)
+```
+
+Now let's do the same with the "2005_2019" dataset.
+```{r clean 2}
+# Set the names of the dataset's columns to the values in row 6
+col_names_2 <- data_2005_2019[6, ] # Get the 6th row to use as column names
+names(data_2005_2019) <- col_names_2 # Set the column names
+
+# Delete the first 6 rows of the document
+data_2005_2019_c <- data_2005_2019[-(1:6), ]
+
+# Filter by column "ÁREA GEOGRÁFICA" for rows that contain "Total"
+data_2005_2019_c <- data_2005_2019_c[data_2005_2019_c$`ÁREA GEOGRÁFICA` == "Total", ]
+
+# Convert to a data frame if it's not already (since we may have a tibble or similar)
+data_2005_2019_c <- as.data.frame(data_2005_2019_c)
+
+# Set variable types
+data_2005_2019_c$AÑO <- as.integer(data_2005_2019_c$AÑO)
+data_2005_2019_c$Población <- as.integer(data_2005_2019_c$Población)
+
+# Reset row numbering
+rownames(data_2005_2019_c) <- NULL
+
+# View the cleaned dataset
+head(data_2005_2019_c)
+```
+
+Let's join the information from this dataset with "main_cities" to get the same name format and ID of the cities from our workers main database. 
+
+```{r add cities id info to 2005-2019}
+# Ensure that MPIO is also character for consistency before the join
+data_2005_2019_c$MPIO <- as.character(data_2005_2019_c$MPIO)
+
+# Perform the inner join
+data_2005_2019_c_joined <- inner_join(data_2005_2019_c, main_cities, by = c("MPIO" = "cod_dane_mun"))
+
+# Now, filter the dataset to only include rows with "principal" or non-NA in the "Tipo" column
+data_2005_2019_c_joined <- data_2005_2019_c_joined %>%
+  filter(!is.na(Tipo) & Tipo == "principal")
+
+# View the first few rows of the joined and filtered dataset
+unique(data_2005_2019_c_joined$ciudad_am)
+names(data_2005_2019_c_joined)
+```
+Check that both datasets have the same columns and correct information. 
+
+```{r}
+head(data_2005_2019_c_joined)
+head(data_2020_2035_c_joined)
+```
+Let's now join both databases into a single one, choose the necessary columns, and order it by alphabetical order (ciudad_am) and ascending order (AÑO).
+
+```{r create joint clean dataset}
+# Combine the two datasets into one
+joint_data_2005_2035 <- bind_rows(data_2020_2035_c_joined, data_2005_2019_c_joined)
+
+# Order the combined dataset first by "ciudad_am" alphabetically and then by "AÑO" in ascending order
+joint_data_2005_2035 <- joint_data_2005_2035 %>%
+  arrange(ciudad_am, AÑO)
+
+#Select the necessary columns and reorganize them as well
+final_joint_data_2005_2035 <- joint_data_2005_2035 %>%
+  select(ciudad_am, MPIO, 'AÑO', 'Población') %>%
+  rename(
+    city = ciudad_am,
+    city_id = MPIO,
+    year = AÑO,
+    population = Población
+  ) 
+
+# View the first few rows of the ordered combined dataset
+head(final_joint_data_2005_2035)
+names(final_joint_data_2005_2035)
+```
+Let's check if the cleaning process was successful.
+```{r chart year}
+# Create the interactive plot directly with plotly
+plotly_obj <- plot_ly(data = final_joint_data_2005_2035, x = ~year, y = ~population, 
+                      color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+                      type = 'scatter', mode = 'lines+markers',
+                      text = ~city, hoverinfo = 'text+x+y') %>%
+  layout(title = "Population Evolution by City from 2005 to 2035",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Population", tickformat = ",d", 
+                      range = c(0, max(final_joint_data_2005_2035$population, na.rm = TRUE) + 500000)),
+         legend = list(orientation = "v", x = 1.05, y = 1))
+
+# Display the interactive plot
+plotly_obj
+```
+
+```{r interpolate to add monthly frecuency}
+str(final_joint_data_2005_2035)
+
+# Adjusted function to interpolate for one city
+interpolate_city <- function(data_city) {
+  if(nrow(data_city) > 0) {
+    # Assume that the city name and city_id are the same for all rows, as it's grouped
+    city_name <- unique(data_city$city)[1]
+    city_id <- unique(data_city$city_id)[1] # Capture the city_id
+
+    # Create an annual time series
+    annual_series <- zoo(data_city$population, order.by = as.Date(paste(data_city$year, "-12-01", sep = "")))
+
+    # Create a sequence of monthly dates from the start to the end of the series
+    monthly_dates <- seq(start(annual_series), end(annual_series), by = "1 month")
+
+    # Perform spline interpolation
+    monthly_series <- na.spline(annual_series, xout = monthly_dates)
+
+    # Convert the monthly interpolated time series back to a data frame
+    return(data.frame(
+      city = city_name,
+      city_id = rep(city_id, length(monthly_series)), # Replicate city_id for each row
+      date = time(monthly_series),
+      population = coredata(monthly_series),
+      year = format(time(monthly_series), "%Y"),
+      month = format(time(monthly_series), "%m")
+    ))
+  } else {
+    return(data.frame()) # Return an empty data.frame if there is no data
+  }
+}
+
+# Apply the interpolation to each city and bind the results into one data frame
+monthly_population_data <- final_joint_data_2005_2035 %>%
+  group_by(city, city_id) %>% # Ensure grouping by city and city_id
+  group_map(~interpolate_city(.x), .keep = TRUE) %>% # .keep=TRUE to keep the grouping variables
+  bind_rows()
+
+# Filter the data for the date range December 2010 to December 2023
+filtered_monthly_data <- monthly_population_data %>%
+  filter(date >= as.Date("2010-12-01") & date <= as.Date("2023-12-31"))
+
+# Convert to a format suitable for plotly
+filtered_monthly_data$date <- format(as.POSIXct(filtered_monthly_data$date), "%Y-%m-%d")
+
+str(filtered_monthly_data)
+```
+
+```{r add column for monthly information}
+annual_population <- final_joint_data_2005_2035 %>%
+  select(city_id, year, population)
+filtered_monthly_data$year <- as.integer(filtered_monthly_data$year)
+filtered_monthly_data <- filtered_monthly_data %>%
+  left_join(annual_population, by = c("city_id", "year"))
+
+
+#Selecting and renaming the remaining columns
+filtered_monthly_data <- filtered_monthly_data %>%
+  select(city, city_id, date, population_month = population.x, year, month, population_year = population.y)
+filtered_monthly_data$population_month <- round(filtered_monthly_data$population_month,0)
+str(filtered_monthly_data)
+```
+
+
+```{r chart monty}
+# Create the interactive plot
+plotly_obj <- filtered_monthly_data %>%
+  plot_ly(x = ~date, y = ~population_month, color = ~city, type = 'scatter', mode = 'lines+markers') %>%
+  layout(
+    title = "Monthly Population Evolution by City (Dec 2010 - Dec 2023)",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Population"),
+    legend = list(orientation = 'v', x = 1.05, y = 1)
+  )
+
+# Display the plot
+plotly_obj
+```
+
+```{r export}
+# Extract the minimum and maximum dates from the dataset
+min_date <- min(filtered_monthly_data$date)
+max_date <- max(filtered_monthly_data$date)
+
+# Convert to "YYYY-MM" format without the day
+min_date <- format(as.Date(min_date), "%Y-%m")
+max_date <- format(as.Date(max_date), "%Y-%m")
+
+# Create the filename using the min and max dates
+filename <- paste0("Population_cleaned_", min_date, "-", max_date, ".xlsx")
+
+# Write the dataframe to an Excel file
+write_xlsx(filtered_monthly_data, filename)
+```
+
+
