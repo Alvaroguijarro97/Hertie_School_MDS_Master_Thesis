@@ -1,0 +1,451 @@
+---
+title: "Time series models"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries, include=Fase}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(forecast)
+library(stats)
+library(tseries)
+library(skimr)
+library(fmtr)
+```
+
+
+```{r read datasets}
+GEIH <- read_excel("GEIH_cleaned_2015-03-2023-12.xlsx")
+Population <- read_excel("Population_cleaned_2010-12-2023-12.xlsx")
+CPI <- read_excel("CPI_Information_cleaned_2015-01-2024-01.xlsx")
+Education <- read_excel("Education_data_cleaned_2011-12-2022-12.xlsx")
+Monetary_poverty <- read_excel("Monetary_Poverty_cleaned_2012-12-2022-12.xlsx")
+cities_indicators <- read_excel("Cities_Indicators_cleaned_2016-12-2021-12.xlsx")
+fiscal_performance <- read_excel("Fiscal_Performance_cleaned_2000-12-2022-12.xlsx")
+latitude_longitude <- read_excel("Latitude_Longitude_cleaned.xlsx")
+score_fiscal_performance <- read_excel("Score_Fiscal_Performance_cleaned_2015-12-2022-12.xlsx")
+```
+
+
+```{r proof they have the necessary information}
+head(GEIH)
+head(Population)
+head(CPI)
+head(Education)
+head(Monetary_poverty)
+head(cities_indicators)
+head(fiscal_performance)
+head(latitude_longitude)
+head(score_fiscal_performance)
+```
+Let's look more into each dataset datatype and summary
+```{r}
+skim(GEIH)
+skim(Population)
+skim(CPI)
+skim(Education)
+skim(Monetary_poverty)
+skim(cities_indicators)
+skim(fiscal_performance)
+skim(latitude_longitude)
+skim(score_fiscal_performance)
+```
+
+Let's make sure all of the columns are in the same format in order to perform the join. 
+```{r}
+GEIH$date <- format(as.Date(GEIH$date), "%Y-%m")
+GEIH$city <- as.character(GEIH$city)
+
+Population$date <- format(as.Date(Population$date), "%Y-%m")
+Population$city <- as.character(Population$city)
+
+summary(GEIH)
+summary(Population)
+```
+Let's filter our GEIH data so we only have the 13 cities we will look into out analysis. 
+```{r}
+print("Initial GEIH unique cities")
+unique(GEIH$city)
+print("Initial Population unique cities")
+unique(Population$city)
+GEIH_c <- GEIH %>%
+  filter(city  %in% c("BARRANQUILLA A.M.","BOGOTÁ D.C.","BUCARAMANGA A.M.","CALI A.M.","CARTAGENA","CÚCUTA A.M.","IBAGUÉ","MANIZALES A.M.","MEDELLÍN A.M.","MONTERÍA","PASTO","PEREIRA A.M.","VILLAVICENCIO"))
+
+print("Cities of interest for the GEIH")
+unique(GEIH_c$city)
+```
+
+Let's add a tag to each variable to identify from which dataset they came from
+```{r}
+# Function to rename columns with a suffix, excluding specified columns
+rename_with_suffix <- function(df, suffix, exclude = c()) {
+  df %>% rename_with(~paste0(., suffix), -all_of(exclude))
+}
+
+GEIH_c <- rename_with_suffix(GEIH_c, ".geih", exclude = c("city", "date"))
+Population <- rename_with_suffix(Population, ".pop", exclude = c("city", "date"))
+CPI <- rename_with_suffix(CPI, ".cpi", exclude = c("city", "date"))
+Education <- rename_with_suffix(Education, ".edu", exclude = c("city", "date"))
+Monetary_poverty <- rename_with_suffix(Monetary_poverty, ".mp", exclude = c("city", "date"))
+cities_indicators <- rename_with_suffix(cities_indicators, ".ci", exclude = c("city", "date"))
+fiscal_performance <- rename_with_suffix(fiscal_performance, ".fp", exclude = c("city", "date"))
+latitude_longitude <- rename_with_suffix(latitude_longitude, ".ll", exclude = c("city"))
+score_fiscal_performance <- rename_with_suffix(score_fiscal_performance, ".sfp", exclude = c("city", "date"))
+
+```
+
+What time frames are we working for each dataset? 
+```{r}
+# Function to get the date range of a dataset
+get_date_range <- function(df, date_column) {
+  range(df[[date_column]], na.rm = TRUE)
+}
+
+# Applying the function to each dataset and printing the date ranges
+GEIH_date_range <- get_date_range(GEIH_c, "date")
+Population_date_range <- get_date_range(Population, "date")
+CPI_date_range <- get_date_range(CPI, "date")
+Education_date_range <- get_date_range(Education, "date")
+Monetary_poverty_date_range <- get_date_range(Monetary_poverty, "date")
+cities_indicators_date_range <- get_date_range(cities_indicators, "date")
+fiscal_performance_date_range <- get_date_range(fiscal_performance, "date")
+score_fiscal_performance_date_range <- get_date_range(score_fiscal_performance, "date")
+
+# Print the date ranges
+print(paste("GEIH_c date range:", GEIH_date_range[1], "/", GEIH_date_range[2]))
+print(paste("Population date range:", Population_date_range[1], "/", Population_date_range[2]))
+print(paste("CPI date range:", CPI_date_range[1], "/", CPI_date_range[2]))
+print(paste("Education date range:", Education_date_range[1], "/", Education_date_range[2]))
+print(paste("Monetary_poverty date range:", Monetary_poverty_date_range[1], "/", Monetary_poverty_date_range[2]))
+print(paste("cities_indicators date range:", cities_indicators_date_range[1], "/", cities_indicators_date_range[2]))
+print(paste("fiscal_performance date range:", fiscal_performance_date_range[1], "/", fiscal_performance_date_range[2]))
+print(paste("score_fiscal_performance date range:", score_fiscal_performance_date_range[1], "/", score_fiscal_performance_date_range[2]))
+
+```
+
+In Colombia, administrative periods for Mayors and Governors are for 4 years since 2008. Our datasets span between several administrative time periods (2008-2011 / 2012-2015 / 2016-2019 / 2020-2023 / 2024-2027), taking into consideration the 2020 Covid-19 pandemic and the disruption that brought to global health, economic, logistical, and productive systems, as well as the introduciton of the MDM statistic in 2016 ("Medición de Desempeño Municipal" = Municipal Performance Measurement, which ranks Colombian cities by their performance on various key economic, health, safety, and demographic indicators) we will be working with the 2016-2019 administrative time period for our prediction. 
+```{r}
+# Perform left joins to combine datasets based on 'city' and 'date'
+df_analysis <- GEIH_c %>%
+  left_join(Population, by = c("city", "date"), suffix = c("", ".pop")) %>%
+  left_join(CPI, by = c("city", "date"), suffix = c("", ".cpi")) %>%
+  left_join(Education, by = c("city", "date"), suffix = c("",".edu")) %>%
+  left_join(Monetary_poverty, by = c("city", "date"), suffix = c("",".mp")) %>%
+  left_join(cities_indicators, by = c("city", "date"), suffix = c("",".ci")) %>%
+  left_join(fiscal_performance, by = c("city", "date"), suffix = c("",".fp")) %>%
+  left_join(latitude_longitude, by = c("city"), suffix = c("",".ll")) %>%
+  left_join(score_fiscal_performance, by = c("city", "date"), suffix = c("",".sfp")) %>%
+  filter(date >= "2016-12" , date <= "2019-12")
+
+unique(df_analysis$city)
+unique(df_analysis$date)
+
+skim(df_analysis)
+summary(df_analysis)
+```
+```{r}
+unique(df_analysis$Concepto.geih)
+
+# List of unique worker types in the Concepto.geih column
+worker_types <- unique(df_analysis$Concepto.geih)
+
+economic_activities <- c(
+  "Ocupados" = "Employed",
+  "No informa" = "Not Reported",
+  "Agricultura, ganadería, caza, silvicultura y pesca" = "Agriculture, Livestock, Hunting, Forestry, and Fishing",
+  "Explotación de minas y canteras" = "Mining and Quarrying",
+  "Industrias manufactureras" = "Manufacturing Industries",
+  "Suministro de electricidad gas, agua y gestión de desechos" = "Electricity, Gas, Water Supply, and Waste Management",
+  "Construcción" = "Construction",
+  "Comercio y reparación de vehículos" = "Commerce and Vehicle Repair",
+  "Alojamiento y servicios de comida" = "Accommodation and Food Services",
+  "Transporte y almacenamiento" = "Transportation and Storage",
+  "Información y comunicaciones" = "Information and Communications",
+  "Actividades financieras y de seguros" = "Financial and Insurance Activities",
+  "Actividades inmobiliarias" = "Real Estate Activities",
+  "Actividades profesionales, científicas, técnicas y servicios administrativos" = "Professional, Scientific, Technical Activities, and Administrative Services",
+  "Administración pública y defensa, educación y atención de la salud humana" = "Public Administration and Defense, Education, and Human Health Care", 
+  "Actividades artísticas, entretenimiento recreación y otras actividades de servicios" = "Artistic Activities, Entertainment, Recreation, and Other Service Activities")
+
+df_analysis_eng <- df_analysis %>% 
+  mutate(Concepto.geih = recode(Concepto.geih, !!!economic_activities))
+
+unique(df_analysis_eng$Concepto.geih)
+
+str(df_analysis_eng)
+colnames(df_analysis_eng)
+```
+Let's only select the colums that are of our interest:
+
+```{r}
+df_analysis_selected <- df_analysis_eng %>% 
+  select(-city_id.pop,-city_id.edu,-year.edu,-month.edu,-year.mp,-month.mp,-year.ci,-month.ci,-year.fp,-month.fp,-year.sfp,-month.sfp) %>%
+  rename( "eco_activity" = "Concepto.geih", 
+          "year" = "year.pop",
+          "month" = "month.pop",
+          "CPI_YTD.cpi" ="CPI_year_to_date_var.cpi")
+str(df_analysis_selected)
+
+#Let's add a description of what each variables means and in what unit they are stored, in order to preprocess it before setting up our prediction models.
+descriptions(df_analysis_selected) <- list(
+  city = "Name of a city in Colombia",
+  eco_activity= "Type of Economic Activity under CIIU 4 A.C",
+  date = "date - Year and Month",
+  workers.geih = "population - Employed population",
+  population_month.pop = "population - Total Population in monthly frecuency (interpolated)",
+  year = "date - Year",
+  month = "date - Month",
+  population_year.pop = "population - Total Population in yearly frecuency",
+  CPI.cpi = "Consumer Price Index, The Consumer Price Index (CPI) is a measure that examines the weighted average of prices of a basket of consumer goods and services, such as transportation, food, and medical care. The CPI is calculated by taking price changes for each item in the predetermined basket of goods and averaging them. ",
+  CPI_YTD.cpi = "% variance -  The CPI (Consumer Price Index) year-to-date (YTD) variance refers to the change in the CPI from the beginning of the current year up to a specific point in time within the same year. ",
+  CPI_year_var.cpi = "% variance - The CPI (Consumer Price Index) yearly variance refers to the percentage change in the CPI over a 12-month period. It measures the rate of inflation or deflation by comparing the price level of the CPI at the end of a year to the price level at the end of the previous year.",
+  CPI_month_var.cpi = "% variance - The CPI (Consumer Price Index) monthly variance refers to the change in the CPI from one month to the next, expressed as a percentage. This measure provides an indication of how consumer prices have moved within a month, reflecting short-term inflation or deflation trends.",
+  Enrollment_Rate_5_16.edu = "% - Proportion of the population between 5 and 16 years old who are attending the educational system. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage.edu = "% - It is the ratio between the number of students enrolled in transition, primary, secondary, and high school who have the theoretical age (5 to 16 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_Transition.edu = "% - It is the ratio between the number of students enrolled in transition who have the theoretical age to attend this level (5 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_Primary.edu = "% - It is the ratio between the number of students enrolled in primary who have the theoretical age to attend this level (6 to 10 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_Secondary.edu = "% - It is the ratio between the number of students enrolled in secondary who have the theoretical age to attend this level (11 to 14 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_HighSchool.edu = "% - # It is the ratio between the number of students enrolled in high school who have the theoretical age to attend this level (15 to 16 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Dropout_Rate.edu = "% - # Intra-annual dropout rate of the official sector. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_Transition.edu = "% - Intra-annual dropout rate of the official sector in transition. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_Primary.edu = "% - Intra-annual dropout rate of the official sector in primary. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_Secondary.edu = "% - Intra-annual dropout rate of the official sector in secondary. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_HighSchool.edu = "% - Intra-annual dropout rate of the official sector in high school. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Pass_Rate.edu = "% - Pass rate of students in the official sector. Identifies the percentage of students in preschool, basic, and high school education who pass according to current educational plans and programs.",
+  Pass_Rate_Transition.edu = "% - Pass rate of students in the official sector in transition. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Pass_Rate_Primary.edu = "% - Pass rate of students in the official sector in primary. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Pass_Rate_Secondary.edu = "% - Pass rate of students in the official sector in secondary. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Pass_Rate_HighSchool.edu = "% - Pass rate of students in the official sector in high school. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Fail_Rate.edu = "% - Failure rate of students in the official sector. Identifies the percentage of students in preschool, basic, and high school education who fail according to current educational plans and programs.",
+  Fail_Rate_Transition.edu = "% - Failure rate of students in the official sector in transition. Identifies the percentage of students at this educational level who fail according to current educational plans and programs.",
+  Fail_Rate_Primary.edu = "% - Failure rate of students in the official sector in primary. Identifies the percentage of students at this educational level who fail according to current educational plans and programs.",
+  Fail_Rate_Secondary.edu = "% - Repetition rate of the official sector. Corresponds to the percentage of students enrolled in secondary education who are repeating the same grade as the previous year.",
+  Fail_Rate_HighSchool.edu = "% - Repetition rate of the official sector. Corresponds to the percentage of students enrolled in high school who are repeating the same grade as the previous year.",
+  I_PM.mp = "% of population - Monetary Poverty Rate",
+  I_PME.mp = "% of population - Extreme Monetary Poverty Rate",
+  Gini.mp = "Gini Coeficient (values between 0-1)",
+  IPUG.mp = "$COP Values in Current Pesos - Average Per Capita Income of the Household Spending Unit",
+  LP.mp = "$COP Values in Current Pesos - Monetary Poverty Lines (monthly values per person)",
+  LPE.mp = "$COP Extreme Monetary Poverty Lines (monthly values per person), Values in Current Pesos",
+  MDM_Resource_Mobilization.ci = "Score between 1-100 - Measures mobilization of financial resources",
+  Tax_And_Non_Tax_Revenue_Per_Capita.ci = "$ COP Values in Current Pesos - Tax and non-tax revenue per capita, excluding territorial order collections",
+  Revenue_From_OT_Instruments_Per_Capita.ci = "$ COP Values in Current Pesos - Revenue collected through territorial ordering instruments per capita",
+  Investment_Financed_By_Own_Resources.ci = "% - Percentage of investment financed by the municipality's own resources",
+  MDM_Execution_Of_Resources.ci = "Score between 1-100 - Execution of financial resources",
+  MDM_Open_Government_And_Transparency.ci = "Score between 1-100 - Measures of open government and transparency practices",
+  MDM_Territorial_Ordering.ci = "Score between 1-100 - Territorial ordering and planning measures",
+  Effective_Collection_Rate.ci = "Effective rate of tax collection",
+  MDM_Education.ci = "Score between 1-100 - Educational coverage and quality in middle education",
+  MDM_Health_Coverage.ci = "Score between 1-100 - Health coverage and services",
+  Health_Coverage_Overall.ci = "% of Population - Overall health coverage from the affiliate registry",
+  Pentavalent_Vaccination_Coverage.ci = "% of Populaion - Coverage rate of the pentavalent vaccine in infants",
+  Infant_Mortality_Rate.ci = "# of infant deaths - Infant mortality rate per 1,000 live births",
+  MDM_Services.ci = "Score 1-100 - Coverage and quality of public services",
+  Rural_Electrical_Coverage.ci = "% of Population - Coverage of rural electrical service",
+  Broadband_Penetration.ci = "% of Population - Number of broadband Internet subscribers relative to the total population",
+  Aqueduct_Coverage.ci = "% of Populaion - Coverage of aqueduct water service",
+  Sewerage_Coverage.ci = "% of Population - Coverage of sewerage service",
+  MDM_Security_And_Coexistence.ci = "Score 1-100 - Security and social coexistence indicators",
+  Theft_Rate_Per_10k_Inhabitants.ci = "# Reported theft cases per 10,000 inhabitants",
+  Homicide_Rate_Per_10k_Inhabitants.ci = "# Homicide cases per 10,000 inhabitantsHomicide cases per 10,000 inhabitants",
+  Domestic_Violence_Rate_Per_10k_Inhabitants.ci = "# of Domestic violence cases per 10,000 inhabitants",
+  TotalIncome.fp = "$ Millions of Pesos - Total income received.",
+  CurrentIncome.fp = "$ Millions of Pesos - Current (or operational) income.",
+  TaxIncome.fp = "$ Millions of Pesos - Income received from taxes.",
+  PropertyTax.fp = "$ Millions of Pesos - Property tax income.",
+  IndustryAndCommerceTax.fp = "$ Millions of Pesos - Tax from industry and commerce activities.",
+  FuelSurcharge.fp = "$ Millions of Pesos - Surcharge on fuel.",
+  OtherTaxIncome.fp = "$ Millions of Pesos - Other tax-related income.",
+  NonTaxIncome.fp = "$ Millions of Pesos - Non-tax related income.",
+  CurrentTransfers.fp = "$ Millions of Pesos - Current transfers received.",
+  NationalLevelCurrentTransfers.fp = "$ Millions of Pesos - Current transfers from the national level.",
+  OtherTransfers.fp = "$ Millions of Pesos - Other transfers.",
+  TotalExpenses.fp = "$ Millions of Pesos - Total expenses.",
+  CurrentExpenses.fp = "$ Millions of Pesos - Current (or operational) expenses.",
+  OperatingExpenses.fp = "$ Millions of Pesos - Operating expenses.",
+  PersonalServices.fp = "$ Millions of Pesos - Expenses on personal services.",
+  GeneralExpenses.fp = "$ Millions of Pesos - General expenses.",
+  TransfersPaid.fp = "$ Millions of Pesos - Transfers paid out.",
+  PublicDebtInterests.fp = "$ Millions of Pesos - Interests on public debt.",
+  CurrentDissaving_Saving.fp = "$ Millions of Pesos - Current dissaving or saving.",
+  CapitalIncome.fp = "$ Millions of Pesos - Income from capital.",
+  Royalties.fp = "$ Millions of Pesos - Income from royalties.",
+  NationalTransfers.fp = "$ Millions of Pesos - Transfers from the national level.",
+  "Co-financing.fp" = "$ Millions of Pesos - Co-financing.",
+  OtherCapitalIncome.fp = "$ Millions of Pesos - Other capital income.",
+  CapitalExpenses.fp = "$ Millions of Pesos - - Capital expenses.",
+  GrossCapitalFormation.fp = "$ Millions of Pesos - Gross capital formation.",
+  OtherCapitalExpenses.fp = "$ Millions of Pesos - Other capital expenses.",
+  TotalDeficitOrSurplus.fp = "$ Millions of Pesos - Total deficit or surplus.",
+  FINANCING.fp = "$ Millions of Pesos - Financing.",
+  NetCredit.fp = "$ Millions of Pesos - Net credit.",
+  Disbursements.fp = "$ Millions of Pesos - Disbursements.",
+  Amortizations.fp = "$ Millions of Pesos - Amortizations.",
+  BalanceResources_VariationInDepositsAndOthers.fp = "$ Millions of Pesos - Balance resources, variation in deposits, and others.",
+  lat.ll = "Latidude",
+  lng.ll = "Longitud",
+  capital.ll = "Type of city",
+  lat_z.ll = "Z - transformation of Latitude",
+  lng_z.ll = "Z - transformation of Longitute",
+  "Self-financing_of_operating_expenses.sfp" = "Score 1-100 - Self-financing of operating expenses: the ability to cover the operating expenses of the central administration with unrestricted income (Law 617 of 2000) ",
+  Debt_service_support.sfp = "Score 1-100 - Debt service support: the ability to support debt service with perceived revenues.",
+  Dependence_on_transfers_from_the_Nation_and_Royalties.sfp = "Score 1-100 - Dependence on transfers from the Nation and Royalties: measures the importance of national transfers and royalties (SGR) in total revenues.",
+  Generation_of_Own_Resources.sfp = "Score 1-100 - Generation of Own Resources: the ability to generate resources complementary to the transfers.",
+  Magnitude_of_Investment.sfp = "Score 1-100 - Magnitude of Investment: quantifies the magnitude of the investment executed by the territorial entity.",
+  Saving_Capacity.sfp = "Score 1-100 - Saving Capacity: determines the degree to which surpluses are freed up to finance investment.", 
+  Fiscal_Performance_Indicator.sfp = "Score 1-100 - Fiscal Performance Indicator",
+  Category.sfp = "Category - Type of Fiscar Performance of city "                                         
+)
+```
+
+Let's run a tests on a subset of our data, only focusing on the total workers in the Colombian economy (where "eco_activity" = Employed)
+
+```{r}
+employed_data <- df_analysis_selected %>% filter(eco_activity == "Employed")
+head(employed_data)
+```
+Let's run some tests
+```{r}
+# 1. Trend Analysis by City
+plotly_obj <- plot_ly(data = employed_data, x = ~date, y = ~workers.geih, 
+                      color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+                      type = 'scatter', mode = 'lines+markers',
+                      text = ~city, hoverinfo = 'text+x+y') %>%
+  layout(title = "Total Number of Workers Over Time by City from 2016 to 2019",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Number of Workers"), 
+         legend = list(orientation = "v", x = 1.05, y = 1))
+
+# Display the interactive plot
+plotly_obj
+```
+
+
+
+
+
+
+
+
+
+
+#Previous code
+```{r}
+# Initialize an empty list to store each dataset
+datasets <- list()
+
+# Loop through each worker type and create a separate dataset
+for (type in worker_types) {
+  # Filter df_analysis for the specific worker type
+  datasets[[type]] <- df_analysis %>% filter(Concepto.geih == type)
+}
+
+# Now, datasets is a list where each element is a dataset corresponding to a worker type.
+# For example, to access the dataset for "Ocupados", you can use datasets[["Ocupados"]]
+df_analysis_employed <- datasets[["Ocupados"]]
+```
+
+
+Let's now check that the information makes sense / it was joined properly. We will be testing this on the information from the city of Barranquilla.
+```{r}
+df_analysis_baq <- df_analysis %>%
+  filter(city == "BARRANQUILLA A.M.", Concepto == "Ocupados") %>%
+  select(city, Concepto, date, workers, population_month, population_year, CPI, CPI_month_var, CPI_year_var, CPI_year_to_date_var)
+
+# Round the column of workers so they are integers
+df_analysis_baq$workers <- round(df_analysis_baq$workers,0)
+df_analysis_baq
+```
+
+
+```{r}
+# Ensure that 'date' is in Date format for plotting
+df_analysis_baq$date <- as.Date(paste0(df_analysis_baq$date, "-01"), format = "%Y-%m-%d")
+
+# Plot date vs workers, population_month, population_year
+ggplot(df_analysis_baq) +
+  geom_line(aes(x = date, y = workers, color = "Workers")) +
+  geom_line(aes(x = date, y = population_month, color = "Population Month")) +
+  geom_line(aes(x = date, y = population_year, color = "Population Year")) +
+  labs(title = "Date vs Workers, Population Month, Population Year",
+       x = "Date",
+       y = "Count") +
+  scale_color_manual(values = c("Workers" = "blue", "Population Month" = "green", "Population Year" = "red")) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot date vs CPI
+ggplot(df_analysis_baq) +
+  geom_line(aes(x = date, y = CPI, color = "CPI")) +
+  labs(title = "Date vs CPI",
+       x = "Date",
+       y = "CPI") +
+  scale_color_manual(values = c("CPI" = "purple")) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot date vs CPI_month_var, CPI_year_var, CPI_year_to_date_var
+ggplot(df_analysis_baq) +
+  geom_line(aes(x = date, y = CPI_month_var, color = "CPI Month Variation")) +
+  geom_line(aes(x = date, y = CPI_year_var, color = "CPI Year Variation")) +
+  geom_line(aes(x = date, y = CPI_year_to_date_var, color = "CPI Year to Date Variation")) +
+  labs(title = "Date vs CPI Variations",
+       x = "Date",
+       y = "CPI Variation") +
+  scale_color_manual(values = c("CPI Month Variation" = "orange", "CPI Year Variation" = "pink", "CPI Year to Date Variation" = "cyan")) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+Let's fit some simple prediction models, but more research and data cleaning most be done in order to identify the best approach to our model. 
+
+```{r}
+# Split the data into training and test sets
+train <- df_analysis_baq[df_analysis_baq$date < "2023-01-01", ]
+test <- df_analysis_baq[df_analysis_baq$date >= "2023-01-01", ]
+
+# Build the univariate model using the historical 'workers' data
+uni_model <- auto.arima(train$workers)
+
+# Forecast the 'workers' for 2024
+uni_forecast <- forecast(uni_model, h = nrow(test))
+
+# Build the multivariate model
+# Note: You need to check for stationarity and co-integration among variables for an accurate multivariate model.
+multi_model <- lm(workers ~ population_month + population_year + CPI + CPI_month_var + CPI_year_var + CPI_year_to_date_var, data = train)
+
+# Forecast 'workers' for 2024 using the multivariate model
+# For multivariate models, we don't have a direct function like forecast(), so we have to predict manually.
+test$predicted_workers <- predict(multi_model, newdata = test)
+
+# Evaluate the models
+# For the univariate model
+accuracy(uni_forecast, test$workers)
+
+# For the multivariate model
+multi_accuracy <- with(test, mean((workers - predicted_workers)^2)) # Mean Squared Error
+
+# Visualization
+plot(test$date, test$workers, type = "l", col = "blue", xlab = "Date", ylab = "Workers", main = "Actual vs Predicted Workers for Barranquilla in 2024")
+lines(test$date, uni_forecast$mean, col = "red")
+lines(test$date, test$predicted_workers, col = "black")
+legend("topleft", legend = c("Actual", "Univariate", "Multivariate"), col = c("blue", "red", "black"), lty = 1)
+```
+- ME (Mean Error): Measures the average forecast error. Values close to 0 are preferable.
+- RMSE (Root Mean Squared Error): Gives the standard deviation of the residuals, measuring how far the data points are from the model's predicted values. Lower values indicate a better fit.
+- MAE (Mean Absolute Error): Similar to RMSE but uses absolute differences. It's easier to interpret than RMSE as it's on the same scale as the data.
+- MPE (Mean Percentage Error): Measures the average percentage error. This helps understand the error in terms of percentage.
+- MAPE (Mean Absolute Percentage Error): Like MPE but uses absolute values. This is useful for comparing the forecast performance across different datasets.
+- MASE (Mean Absolute Scaled Error): Compares the MAE to the MAE of a naïve benchmark model. Values less than one indicate a model performing better than the naïve model.
+- ACF1 (First Autocorrelation of Errors): Measures the correlation between the forecast errors and their lag. Values close to 0 indicate good model fit.
+
+
