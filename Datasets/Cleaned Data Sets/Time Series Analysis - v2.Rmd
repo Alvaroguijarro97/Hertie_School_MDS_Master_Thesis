@@ -24,6 +24,9 @@ library(plotly)
 library(corrplot)
 library(tseries)
 library(rvest)
+library(caret)
+library(progress)
+library(lmtest)
 ```
 
 
@@ -317,16 +320,7 @@ Let's run a tests on a subset of our data, only focusing on the total workers in
 df_analysis_selected$month <- as.numeric(df_analysis_selected$month)
 employed_data <- df_analysis_selected %>% 
   filter(eco_activity == "Employed") %>%
-#  select(-eco_activity,
-#         -Net_Coverage_Transition.edu,-Net_Coverage_Primary.edu,-Net_Coverage_Secondary.edu,-Net_Coverage_HighSchool.edu,
-#         -Dropout_Rate_Transition.edu,-Dropout_Rate_Primary.edu,-Dropout_Rate_Secondary.edu,-Dropout_Rate_HighSchool.edu,
-#         -Pass_Rate_Transition.edu,-Pass_Rate_Primary.edu,-Pass_Rate_Secondary.edu,-Pass_Rate_HighSchool.edu,
-#         -CurrentIncome.fp, -TaxIncome.fp,-PropertyTax.fp,-IndustryAndCommerceTax.fp,-FuelSurcharge.fp,-OtherTaxIncome.fp,
-#         -OtherTaxIncome.fp,-NonTaxIncome.fp,-CurrentTransfers.fp,-NationalLevelCurrentTransfers.fp,-OtherTransfers.fp,
-#         -CurrentExpenses.fp,-OperatingExpenses.fp,-PersonalServices.fp,-GeneralExpenses.fp,-TransfersPaid.fp,-PublicDebtInterests.fp,
-#         -Royalties.fp,-NationalTransfers.fp,-"Co-financing.fp",-OtherCapitalIncome.fp, -GrossCapitalFormation.fp, -OtherCapitalExpenses.fp,
-#         -NetCredit.fp,-Disbursements.fp,-Amortizations.fp,-BalanceResources_VariationInDepositsAndOthers.fp)
-  select(workers.geih, city, eco_activity, date, year, month, population_month.pop, month,population_year.pop, CPI.cpi, CPI_month_var.cpi, Enrollment_Rate_5_16.edu, Net_Coverage.edu, Dropout_Rate.edu, Pass_Rate.edu, Fail_Rate.edu, I_PM.mp, I_PME.mp, Gini.mp, IPUG.mp, MDM_Resource_Mobilization.ci, MDM_Execution_Of_Resources.ci, MDM_Open_Government_And_Transparency.ci, MDM_Territorial_Ordering.ci, MDM_Education.ci, MDM_Health_Coverage.ci, Health_Coverage_Overall.ci, MDM_Services.ci, MDM_Security_And_Coexistence.ci, lat_z.ll, lng_z.ll, "Self-financing_of_operating_expenses.sfp", Debt_service_support.sfp, Dependence_on_transfers_from_the_Nation_and_Royalties.sfp , Generation_of_Own_Resources.sfp, Magnitude_of_Investment.sfp, Saving_Capacity.sfp, Fiscal_Performance_Indicator.sfp)
+  select(workers.geih, city, eco_activity, date, year, month, population_month.pop, CPI.cpi, CPI_month_var.cpi, Enrollment_Rate_5_16.edu, Net_Coverage.edu, Pass_Rate.edu, I_PM.mp, I_PME.mp, Gini.mp, IPUG.mp, LP.mp, LPE.mp, MDM_Resource_Mobilization.ci, MDM_Execution_Of_Resources.ci, MDM_Open_Government_And_Transparency.ci, MDM_Territorial_Ordering.ci, MDM_Education.ci, MDM_Health_Coverage.ci, MDM_Services.ci, MDM_Security_And_Coexistence.ci, TotalIncome.fp, TotalExpenses.fp, "Self-financing_of_operating_expenses.sfp", Debt_service_support.sfp, Dependence_on_transfers_from_the_Nation_and_Royalties.sfp, Generation_of_Own_Resources.sfp, Magnitude_of_Investment.sfp, Saving_Capacity.sfp, Fiscal_Performance_Indicator.sfp)
 employed_data
 ```
 Let's run some tests
@@ -350,7 +344,7 @@ For trials, let's do a model analysis for one city only. We'll use Bogota as our
 ```{r}
 bogota_dataset <- employed_data %>%
   filter( employed_data$city == "BOGOTÁ D.C.") %>%
-  select(-city, -eco_activity, -lat_z.ll, -lng_z.ll)
+  select(-city, -eco_activity)
 bogota_dataset
 ```
 
@@ -358,20 +352,9 @@ bogota_dataset
 
 ```{r}
 bogota_dataset$date <- as.Date(paste0(bogota_dataset$date, "-01"), format = "%Y-%m-%d")
-plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', main='Time Series Plot', xlab='Date', ylab='Number of Workers')
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', main='Evolution of workers during 2016-12 and 2019-12', xlab='Date', ylab='Number of Workers')
 ```
-There seems to be some patterns that repeat each year, we need to run Stationarity and seasonality check
-```{r}
-# Split the data into two sections and compare means and variances
-split1 <- bogota_dataset$workers.geih[1:(length(bogota_dataset$workers.geih)/2)]
-split2 <- bogota_dataset$workers.geih[(length(bogota_dataset$workers.geih)/2 + 1):length(bogota_dataset$workers.geih)]
-mean(split1)
-mean(split2)
-var(split1)
-var(split2)
-
-```
-In order to determine whether the time series is stationary or non-stationary we can run the Augmented Dickey-Fuller (ADF) Test which is used to test the null hypothesis that there is a unit root present in the series, which suggests non-stationarity.
+There seems to be some patterns that repeat each year, we need to run Stationary and seasonality check. In order to determine whether the time series is stationary or non-stationary we can run the Augmented Dickey-Fuller (ADF) Test which is used to test the null hypothesis that there is a unit root present in the series, which suggests non-stationarity.
 ```{r}
 adf.test(bogota_dataset$workers.geih, alternative="stationary")
 ```
@@ -386,10 +369,10 @@ decomposed <- stl(ts(bogota_dataset$workers.geih, frequency=12), s.window="perio
 plot(decomposed)
 ```
 From this seasonal decomposition analysis of the data from the city of Bogota we can conclude the following points:
-- Observing the top "data" panel we can see that it has some level of fluctuation, possibly indicating seasonality.
-- "seasonal" panel, the repeating patter suggests that there is a seasonal component in the employment data for the city. 
-- "trend" panel shows a slight upward trend in the # of employed workers over time
-- the "remainder" (residuals) panel show some spikes in the data, which could indicate either outliers or unexplained variance by the seasonal and trend components on our data. 
+- Observing the top *"data"* panel we can see that it has some level of fluctuation, possibly indicating seasonality.
+- *"seasonal"* panel, the repeating patter suggests that there is a seasonal component in the employment data for the city. 
+- *"trend"* panel shows a slight upward trend in the # of employed workers over time
+- the *"remainder"* (residuals) panel show some spikes in the data, which could indicate either outliers or unexplained variance by the seasonal and trend components on our data. 
 
 ```{r}
 seasonplot(ts(bogota_dataset$workers.geih, frequency=12))
@@ -398,9 +381,7 @@ seasonplot(ts(bogota_dataset$workers.geih, frequency=12))
 acf(bogota_dataset$workers.geih)
 pacf(bogota_dataset$workers.geih)
 ```
-Let's modify our predicting variable and prepare our data for modeling
-
-
+Let's modify our predicting variable to get rid of stationarity and prepare our data for modeling.
 ```{r}
 # Step 1) Apply the log transformation
 bogota_dataset$log_workers <- log(bogota_dataset$workers.geih)
@@ -427,334 +408,511 @@ print(adf_test_result)
 
 
 ```
-The results of the ADF Test suggest that the differnced log-transformed number of workers is stationary, as the p-value is below the significance level of 0.05. Since we have confirmed stationarity post-differencing and seasonality from the decomposition, le's build a SARIMA model to predict this variable. 
+The results of the ADF Test suggest that the difference log-transformed number of workers is stationary, as the p-value is below the significance level of 0.05. Since we have confirmed stationarity post-differencing and seasonality from the decomposition, let's build a SARIMA model to predict this variable.
+
+Let's run a prediction modeling pipeline. 
 
 ```{r}
-# Check the ADF test for the other predictive variables
-predictor_columns <- setdiff(names(bogota_dataset), c("workers.geih", date, year, month))
+# Step 1: Preparing the data for training and testing
 
-# Initialize a list to store ADF test results
-adf_results <- list()
+# Splitting the dataset into training and testing sets based on the date
+training_set <- bogota_dataset %>% filter(date < as.Date("2019-07-01"))
+testing_set <- bogota_dataset %>% filter(date >= as.Date("2019-07-01"))
 
-# Loop through predictors and perform ADF test
-for (col in predictor_columns) {
-  # Assuming the predictors are already numeric, else convert or exclude non-numeric
-  time_series <- na.omit(bogota_dataset[[col]])
-  
-  # Only proceed if there's enough data after omitting NAs
-  if (length(time_series) > 0) {
-    adf_test_result <- adf.test(time_series, alternative = "stationary")
-    adf_results[[col]] <- adf_test_result$p.value
-  } else {
-    adf_results[[col]] <- NA  # Not enough data to test
-  }
-}
+# Step 2: Fitting the SARIMA model on the training set
+# The log transformation was already applied before differencing, which is 'd=1'.
+# auto.arima will try different combinations of (p, d, q)(P, D, Q)[s] and return the best model based on AIC
+sarima_model <- auto.arima(training_set$diff_log_workers, d = 1,  stationary = TRUE, seasonal = TRUE, stepwise = FALSE, trace = TRUE ,approximation = FALSE)
 
-# Check results
-adf_results
-```
-
-
-
-
-
-
-
-OLS Model pipeline.We will start by checking for stationarity on our dataset by running the Augmented Dickey-Fuller test (ADF), which tests the null hypothesis that a unit root is present in a time series sample. 
-
-```{r}
-#Checking for stationarity
-adf_result <- adf.test(bogota_dataset_ts, alternative = "stationary")
-adf_result
-```
-he ADF test has a p-value of 0.4808, which is greater than the common alpha level of 0.05. This means that the null hypothesis of the presence of a unit root (non-stationarity) cannot be rejected for the employment data in Bogotá. This means that we need to tackle the presence of seasonality and a lack of stationarity in our time series, and for this, a model that can handle seasonality is more in line with our research quesiton. We will proceed to explore a SARIMA / ARIMA route of our prediction. 
-
-Correlation Matrix 
-```{r}
-unique(colnames(bogota_dataset))
-
-interesting_vars <- c("workers.geih", "MDM_Resource_Mobilization.ci" ,
-"MDM_Execution_Of_Resources.ci" ,
-"MDM_Open_Government_And_Transparency.ci" ,
-"MDM_Territorial_Ordering.ci" ,
-"MDM_Education.ci" ,
-"MDM_Health_Coverage.ci" ,
-"Health_Coverage_Overall.ci" ,
-"MDM_Services.ci" ,
-"MDM_Security_And_Coexistence.ci")
-
-# Let's build a correlation matrix to get a view on co-dependency
-cor_matrix <- cor(bogota_dataset[, interesting_vars], use = "complete.obs")
-print(cor_matrix)
-# Visual analysis
-pairs(bogota_dataset[, interesting_vars], pch = 21, bg = c("red"))
-```
-
-
-```{r}
-vif_model <- lm(workers.geih  ~  MDM_Resource_Mobilization.ci+ MDM_Execution_Of_Resources.ci+ MDM_Open_Government_And_Transparency.ci+ MDM_Territorial_Ordering.ci+ MDM_Education.ci+ MDM_Health_Coverage.ci+ Health_Coverage_Overall.ci+ MDM_Services.ci+ MDM_Security_And_Coexistence.ci, data = bogota_dataset)
-vif(vif_model)
-```
-
-
-```{r}
-# Split the data into training and test sets
-bogota_dataset$date <- as.Date(paste0(bogota_dataset$date, "-01"), format = "%Y-%m-%d")
-
-train <- bogota_dataset[bogota_dataset$date < "2019-06-01", ]
-test <- bogota_dataset[bogota_dataset$date >= "2019-06-01", ]
-
-# Build the univariate model using the historical 'workers' data
-uni_model <- auto.arima(train$workers.geih)
-
-# Forecast the 'workers' for 2019-06
-uni_forecast <- forecast(uni_model, h = nrow(test))
-
-# Build the multivariate model
-multi_model <- lm(workers.geih ~ year + month + population_month.pop + population_year.pop + 
-                  CPI.cpi + CPI_month_var.cpi + Enrollment_Rate_5_16.edu + Net_Coverage.edu + 
-                  Dropout_Rate.edu + Pass_Rate.edu + Fail_Rate.edu + I_PM.mp + I_PME.mp + 
-                  Gini.mp + IPUG.mp + MDM_Resource_Mobilization.ci + MDM_Execution_Of_Resources.ci + 
-                  MDM_Open_Government_And_Transparency.ci + MDM_Territorial_Ordering.ci + 
-                  MDM_Education.ci + MDM_Health_Coverage.ci + Health_Coverage_Overall.ci + 
-                  MDM_Services.ci + MDM_Security_And_Coexistence.ci + lat_z.ll + lng_z.ll + 
-                  `Self-financing_of_operating_expenses.sfp` + Debt_service_support.sfp + 
-                  Dependence_on_transfers_from_the_Nation_and_Royalties.sfp + 
-                  Generation_of_Own_Resources.sfp + Magnitude_of_Investment.sfp + 
-                  Saving_Capacity.sfp + Fiscal_Performance_Indicator.sfp, 
-                  data = train)
-
-# Forecast 'workers' for 2019 using the multivariate model
-# For multivariate models, we don't have a direct function like forecast(), so we have to predict manually.
-test$predicted_workers <- predict(multi_model, newdata = test)
-
-# Evaluate the models
-# For the univariate model
-accuracy(uni_forecast, test$workers.geih)
-
-# For the multivariate model
-multi_accuracy <- with(test, mean((workers.geih - predicted_workers)^2)) # Mean Squared Error
-
-# Visualization
-plot(test$date, test$workers.geih, type = "l", col = "blue", xlab = "Date", ylab = "Workers", main = "Actual vs Predicted Workers for Bogota in 2019")
-lines(test$date, uni_forecast$mean, col = "red")
-lines(test$date, test$predicted_workers, col = "black")
-legend("topleft", legend = c("Actual", "Univariate", "Multivariate"), col = c("blue", "red", "black"), lty = 1)
-
-```
-
-
-```{r}
-library(forecast)
-
-# Identify potential models using auto.arima which automatically selects the best (p,d,q)(P,D,Q)[m]
-sarima_model <- auto.arima(bogota_dataset_ts)
-
-# Check model summary
+# Summarize the selected model
 summary(sarima_model)
 
-# Forecast future points
-forecasts <- forecast(sarima_model, h = 12)  # Forecast next 12 months
-plot(forecasts)
+# Step 3: Forecasting the future points with the SARIMA model
+forecasts <- forecast(sarima_model, h = nrow(testing_set))
 
+# Because we forecasted the differenced log, we need to reverse the differencing
+# and exponentiate to get the forecast in the original scale
+forecasts$mean <- exp(cumsum(c(last(training_set$log_workers), forecasts$mean))[-1])
+
+# Step 4: Comparing the forecasted data with the actual data
+# To compare, we need the actual 'workers.geih' values from the test set
+actual_workers <- testing_set$workers.geih
+
+# Plot the forecasts against the actual values
+plot(forecasts$mean, type = 'l', col = 'red', ylim = range(c(forecasts$mean, actual_workers)), xaxt = 'n')
+lines(actual_workers, col = 'black')
+axis(1, at = 1:length(actual_workers), labels = testing_set$date)
+legend("topleft", legend = c("SARIMA Forecast", "Actual"), col = c("red", "black"), lty = 1)
 ```
+The best SARIMA model that was fitted is a seasonal ARIMA (3,0,0), which indicates an autoregressive model of order 3 without differencing or moving average components.
 
+- *Coefficients (ar1, ar2, ar3)*= values of 0.1962, 0.1563, -0.5960 comprising of the weights for the first, second, and third lag respectively. 
+- *Standard Error (s.e.)* = values of 0.1522, 0.1567, 0.1528 for the standar error of the coefficients, used to asssess the reliability of them. smaller values suggest more confidence in the estimates. 
+- *Sigma^2* = 0.0001205, estimated variance of the residuals (the variation of the observations that the model doesn't explain)
+- *log likelihood* = 93.69, likelihood function given the estimated parameters.
+- *AIC, AICc, BIC* :-179.38, -177.78, -173.77 Respectively. Used to compare models with different numbers of parameters.Evaluate how good the model fitted and the complexity of it. 
 
-
-
-
-
-PREVIOUS CODE
-
-
-We have too many variables for the number of data points we currently have, so we must narrow these down. Let's run a correlation analysis to identify the most important variables:
+After doing the prediction, let's go over the results for each of the error measures in the training set error measure:
+- *ME (Mean Error):*-0.0003392892, value close to zero, suggesting no bias in the predictions on average.
+- *RMSE (Root Mean Squared Error):* 0.01041566, standard deviation of the residuals, measuring how far the data points are from the model's predicted values
+- *MAE (Mean Absolute Error):* 0.008273079, mean absolute error between predicted values and actual model ones.
+- *MPE (Mean Percentage Error):* 42.89479%, almost off by 50%, which could indicate that the model is off by a large percentage. 
+- *MAPE (Mean Absolute Percentage Error):* 122.5155
 
 ```{r}
-# Calculate correlations of all predictors with the target variable
-correlations <- sapply(bogota_dataset[, !names(bogota_dataset) %in% 'workers.geih'], function(x) {
-  cor(x, bogota_dataset$workers.geih, use = "complete.obs")
-})
-
-# Sort correlations by absolute value in descending order to see the most significant correlations at the top
-sorted_correlations <- sort(abs(correlations), decreasing = TRUE)
-
-# Print the sorted correlations
-print(sorted_correlations)
+# Step 5: Evaluating the model
+accuracy(forecasts$mean, actual_workers)
 ```
+When transforming the predicted variable back from it's logarithmic form, we can interprate these results in a workers scale. 
+- *ME (Mean Error):* On average, the model's predictions were off by 77,407.25 from the actual values. 
+- *RMSE (Root Mean Squared Error):* On average, the model's predictions deviate from the actual values by 83,076.67 when considering both positive and negative deviations.
+- *MAE (Mean Absolute Error):* On average, the magnitude of errors in the predictions, without considering their positive or negative direction are off by 77407.25 per data point.
+- *MPE (Mean Percentage Error)*: On average, the model's predictions are off by 1.97% from the actual values. 
+- *MAPE (Mean Absolute Percentage Error):* On average, the model's predictions have about 1.97% error in terms of the actual values.
+
+These will be the values we need to try to improve with our following models. 
 
 ```{r}
-# Selecting variables based on correlation threshold
-# Ensure to include the target variable 'workers.geih' explicitly
-selected_vars <- names(which(abs(correlations) > 0.5))
-selected_vars <- c("workers.geih", selected_vars)  # Adding the target variable
+# Plot the actual data for the complete dataset
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers')
 
-# Creating a subset of the dataset with these variables
-bogota_model_data <- bogota_dataset[, selected_vars]
+# Add the forecasted data starting from the prediction date
+lines(testing_set$date, forecasts$mean, col='blue')
 
-# Check that 'workers.geih' is indeed in the subset
-if(!"workers.geih" %in% names(bogota_model_data)) {
-  stop("workers.geih is not included in the model data.")
-}
+# Add the actual data for the prediction period
+lines(testing_set$date, actual_workers, col='red')
 
-# Checking for multicollinearity with the Variance Inflation Factor (VIF)
-library(car)
-vif_model <- lm(workers.geih ~ ., data = bogota_model_data)
-print(alias(vif_model))  # This function will show which terms have been aliased
-vif_results <- vif(vif_model)
-print(vif_results)
+# Add a legend to the plot
+legend("topleft", legend=c("Actual (2016-2019)", "SARIMA Forecast (2019-07 onwards)", "Actual (2019-07 onwards)"),
+       col=c("black", "blue", "red"), lty=1, cex=0.8)
+
+
+# Ensure the plot has the correct limits
+xlim <- range(bogota_dataset$date)
+ylim <- range(c(bogota_dataset$workers.geih, forecasts$mean, actual_workers))
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', xlim=xlim, ylim=ylim)
 
 ```
-
-
-Correlation analysis between variables
+With the base SARIMA Model done for the "workers" variable, let's now proceed with setting up the SARIMAX model in order to see if we can improve the model's indicators by using external variables. Let's see what the results are before standardizing any of the exogenous variables 
 ```{r}
-numeric_data <- final_data_employed %>% select_if(is.numeric)
-head(numeric_data)
-```
-
-
-```{r}
-cor_matrix <- cor(numeric_data, use = "complete.obs")  # 'use' argument handles missing values
-
-# Convert the correlation matrix to a long dataframe
-cor_data_long <- cor_matrix %>% 
-  as.data.frame() %>% 
-  tibble::rownames_to_column("Variable1") %>% 
-  pivot_longer(-Variable1, names_to = "Variable2", values_to = "Correlation")
-
-# Remove self-correlations and ensure unique pairs
-cor_data_long <- cor_data_long %>% 
-  filter(Variable1 != Variable2) %>%
-  distinct(Variable1, Variable2, .keep_all = TRUE)
-
-cor_data_sorted <- cor_data_long %>% 
-  mutate(AbsCorrelation = abs(Correlation)) %>% 
-  arrange(desc(AbsCorrelation)) %>% 
-  select(-AbsCorrelation)
-
-cor_data_sorted
+head(bogota_dataset)
+print(colnames(bogota_dataset))
 ```
 
 ```{r}
-# Optionally, filter for correlations above a certain threshold, e.g., |Correlation| > 0.5
-cor_data_strong <- cor_data_sorted %>% 
-  filter(abs(Correlation) > 0.5)
+# Step 1: Preparing the data for training and testing and selecting the external variables
 
-cor_data_strong
+# Splitting the dataset into training and testing sets based on the date
+training_set_bog <- bogota_dataset %>% filter(date < as.Date("2019-07-01"))
+testing_set_bog <- bogota_dataset %>% filter(date >= as.Date("2019-07-01"))
+
+external_vars <- training_set_bog %>% select(-workers.geih,-date,-year,-month,-log_workers, -diff_log_workers) 
+
+# Convert external_vars to a numeric matrix
+external_vars_matrix <- as.matrix(external_vars)
+
+# Checking for highly correlated predictors
+correlation_matrix <- cor(external_vars_matrix)
+highlyCorrelated <- findCorrelation(correlation_matrix, cutoff = 0.70)
+external_vars_matrix <- external_vars_matrix[, -highlyCorrelated]
+
+# Step 2: Fitting the SARIMAX model on the training set
+sarimax_model <- auto.arima(training_set_bog$diff_log_workers, xreg = external_vars_matrix, d = 1, seasonal = TRUE, stepwise = FALSE, trace = TRUE, approximation = FALSE)
+
+# Summarize the selected model
+summary(sarimax_model)
+
+# Step 3: Preparing external variables for forecasting
+future_external_vars <- testing_set_bog %>% 
+  select(-workers.geih,-date,-year,-month,-log_workers, -diff_log_workers) 
+
+# Apply the same pre-processing as was done on the training set's external variables
+future_external_vars_matrix <- as.matrix(future_external_vars)
+future_external_vars_matrix <- future_external_vars_matrix[, -highlyCorrelated]  # Remove highly correlated features
+
+sarimax_forecasts <- forecast(sarimax_model, xreg = future_external_vars_matrix, h = nrow(testing_set_bog))
+sarimax_forecasts$mean <- exp(cumsum(c(last(testing_set_bog$log_workers), sarimax_forecasts$mean))[-1])
+
+# Step 4: Comparing the forecasted data with the actual data
+# To compare, we need the actual 'workers.geih' values from the test set
+actual_workers_bog <- testing_set_bog$workers.geih
+
+# Step 4: Plotting the forecasts against actual values
+plot(sarimax_forecasts$mean, type = 'l', col = 'purple', ylim = range(c(sarimax_forecasts$mean, actual_workers_bog)), xaxt = 'n')
+lines(actual_workers, col = 'black')
+axis(1, at = 1:length(actual_workers), labels = testing_set_bog$date)
+legend("topleft", legend = c("SARIMAX Forecast No Preprocessing", "Actual"), col = c("purple", "black"), lty = 1)
 ```
-
-
-
-
-
-
-
-
-
-
-
-#Previous code
 ```{r}
-# Initialize an empty list to store each dataset
-datasets <- list()
+# Calculate the combined range for the y-axis limits
+combined_y_range <- range(c(bogota_dataset$workers.geih, forecasts$mean, actual_workers, sarimax_forecasts$mean))
 
-# Loop through each worker type and create a separate dataset
-for (type in worker_types) {
-  # Filter df_analysis for the specific worker type
-  datasets[[type]] <- df_analysis %>% filter(Concepto.geih == type)
-}
+# Set the plot with the correct limits
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', xlim=range(bogota_dataset$date), ylim=combined_y_range)
 
-# Now, datasets is a list where each element is a dataset corresponding to a worker type.
-# For example, to access the dataset for "Ocupados", you can use datasets[["Ocupados"]]
-df_analysis_employed <- datasets[["Ocupados"]]
+# Add the forecasted data starting from the prediction date
+lines(testing_set$date, forecasts$mean, col='blue')
+
+# Add the actual data for the prediction period
+lines(testing_set$date, actual_workers, col='red')
+
+# Add the SARIMAX forecasted data
+lines(testing_set_bog$date, sarimax_forecasts$mean, col='purple')
+
+# Add a legend to the plot
+legend("topleft", legend=c("Actual (2016-2019)", "SARIMA Forecast (2019-07 onwards)", "Actual (2019-07 onwards)", "SARIMAX Forecast"),
+       col=c("black", "blue", "red", "purple"), lty=1, cex=0.8)
 ```
-
-
-Let's now check that the information makes sense / it was joined properly. We will be testing this on the information from the city of Barranquilla.
+Let's run some diagnostic checks to understand why our SARIMAX model is giving us the following results:
 ```{r}
-df_analysis_baq <- df_analysis %>%
-  filter(city == "BARRANQUILLA A.M.", Concepto == "Ocupados") %>%
-  select(city, Concepto, date, workers, population_month, population_year, CPI, CPI_month_var, CPI_year_var, CPI_year_to_date_var)
-
-# Round the column of workers so they are integers
-df_analysis_baq$workers <- round(df_analysis_baq$workers,0)
-df_analysis_baq
+summary(sarimax_model)
+```
+```{r}
+checkresiduals(sarimax_model)
 ```
 
+
+
+Looking at the results of the prediction, this SARIMAX model is just increasing the amount of workers on an exponential rate, not really following any seasonal trend. In order to counteract this, we will first preprocess and clean the different key variables we would like to include in our study and then run the model again. 
+```{r}
+sarimax_forecasts
+```
+Let's modify the variables we want to analyze:
+```{r}
+# Step 1: Preparing the data for training and testing and selecting the external variables
+bogota_dataset_transformed <- bogota_dataset %>%
+  mutate(log_population_month = log(population_month.pop + 1),
+         log_IPUG = log(IPUG.mp + 1),
+         log_LP = log(LP.mp + 1),
+         log_LPE = log(LPE.mp + 1),
+         log_TotalIncome = log(TotalIncome.fp +1),
+         log_TotalExpenses = log(TotalExpenses.fp +1)) %>%
+  mutate_at(vars(MDM_Resource_Mobilization.ci, MDM_Execution_Of_Resources.ci, MDM_Open_Government_And_Transparency.ci,
+                 MDM_Territorial_Ordering.ci, MDM_Education.ci, MDM_Health_Coverage.ci, MDM_Services.ci, MDM_Security_And_Coexistence.ci,
+                 `Self-financing_of_operating_expenses.sfp`, Debt_service_support.sfp, Dependence_on_transfers_from_the_Nation_and_Royalties.sfp,
+                 Generation_of_Own_Resources.sfp, Magnitude_of_Investment.sfp, Saving_Capacity.sfp, Fiscal_Performance_Indicator.sfp),
+            ~ ./ 100) %>%
+  select(workers.geih, date, year, month, log_population_month, CPI.cpi, CPI_month_var.cpi, Enrollment_Rate_5_16.edu, Net_Coverage.edu, Pass_Rate.edu, I_PM.mp, I_PME.mp, log_IPUG, log_LP, log_LPE, Gini.mp, log_TotalIncome, log_TotalExpenses, `MDM_Resource_Mobilization.ci`, `MDM_Execution_Of_Resources.ci`, `MDM_Open_Government_And_Transparency.ci`, `MDM_Territorial_Ordering.ci`, `MDM_Education.ci`, `MDM_Health_Coverage.ci`, `MDM_Services.ci`, `MDM_Security_And_Coexistence.ci`, `Self-financing_of_operating_expenses.sfp`, `Debt_service_support.sfp`, `Dependence_on_transfers_from_the_Nation_and_Royalties.sfp`, `Generation_of_Own_Resources.sfp`, `Magnitude_of_Investment.sfp`, `Saving_Capacity.sfp`, `Fiscal_Performance_Indicator.sfp`, log_workers, diff_log_workers)
+  
+  
+# Splitting the dataset into training and testing sets based on the date
+training_set_bog_t <- bogota_dataset_transformed %>% filter(date < as.Date("2019-07-01"))
+testing_set_bog_t <- bogota_dataset_transformed %>% filter(date >= as.Date("2019-07-01"))
+
+external_vars_t <- training_set_bog_t %>% select(-workers.geih,-date,-year,-month,-log_workers, -diff_log_workers)
+
+# Convert external_vars_t to a numeric matrix
+external_vars_matrix_t <- as.matrix(external_vars_t)
+
+# Checking for highly correlated predictors
+correlation_matrix_t <- cor(external_vars_matrix_t)
+highlyCorrelated_t <- findCorrelation(correlation_matrix_t, cutoff = 0.70)
+external_vars_matrix_t <- external_vars_matrix_t[, -highlyCorrelated_t]
+
+# Step 2: Fitting the SARIMAX model on the training set
+sarimax_model_t <- auto.arima(training_set_bog_t$diff_log_workers, xreg = external_vars_matrix_t, d = 1, seasonal = TRUE, stepwise = FALSE, trace = TRUE, approximation = FALSE)
+
+# Summarize the selected model
+summary(sarimax_model_t)
+
+# Step 3: Preparing external variables for forecasting
+future_external_vars_t <- testing_set_bog_t %>% 
+  select(-workers.geih,-date,-year,-month,-log_workers, -diff_log_workers)
+
+# Apply the same pre-processing as was done on the training set's external variables
+future_external_vars_matrix_t <- as.matrix(future_external_vars_t)
+future_external_vars_matrix_t <- future_external_vars_matrix_t[, -highlyCorrelated_t]  # Remove highly correlated features
+
+sarimax_forecasts_t <- forecast(sarimax_model_t, xreg = future_external_vars_matrix_t, h = nrow(testing_set_bog_t))
+sarimax_forecasts_t$mean <- exp(cumsum(c(last(testing_set_bog_t$log_workers), sarimax_forecasts_t$mean))[-1])
+
+# Step 4: Comparing the forecasted data with the actual data
+# To compare, we need the actual 'workers.geih' values from the test set
+actual_workers_bog <- testing_set_bog_t$workers.geih
+
+# Step 4: Plotting the forecasts against actual values
+plot(sarimax_forecasts_t$mean, type = 'l', col = 'green', ylim = range(c(sarimax_forecasts_t$mean, actual_workers_bog)), xaxt = 'n')
+lines(actual_workers, col = 'black')
+axis(1, at = 1:length(actual_workers), labels = testing_set_bog_t$date)
+legend("topleft", legend = c("SARIMAX Forecast Preprocessing", "Actual"), col = c("green", "black"), lty = 1)
+
+external_vars_matrix_t
+future_external_vars_matrix_t
+```
 
 ```{r}
-# Ensure that 'date' is in Date format for plotting
-df_analysis_baq$date <- as.Date(paste0(df_analysis_baq$date, "-01"), format = "%Y-%m-%d")
+# Calculate the combined range for the y-axis limits
+combined_y_range <- range(c(bogota_dataset$workers.geih, forecasts$mean, actual_workers, sarimax_forecasts$mean,sarimax_forecasts_t$mean))
 
-# Plot date vs workers, population_month, population_year
-ggplot(df_analysis_baq) +
-  geom_line(aes(x = date, y = workers, color = "Workers")) +
-  geom_line(aes(x = date, y = population_month, color = "Population Month")) +
-  geom_line(aes(x = date, y = population_year, color = "Population Year")) +
-  labs(title = "Date vs Workers, Population Month, Population Year",
-       x = "Date",
-       y = "Count") +
-  scale_color_manual(values = c("Workers" = "blue", "Population Month" = "green", "Population Year" = "red")) +
-  theme_classic() +
-  theme(plot.title = element_text(hjust = 0.5))
+# Set the plot with the correct limits
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', xlim=range(bogota_dataset$date), ylim=combined_y_range)
 
-# Plot date vs CPI
-ggplot(df_analysis_baq) +
-  geom_line(aes(x = date, y = CPI, color = "CPI")) +
-  labs(title = "Date vs CPI",
-       x = "Date",
-       y = "CPI") +
-  scale_color_manual(values = c("CPI" = "purple")) +
-  theme_classic() +
-  theme(plot.title = element_text(hjust = 0.5))
+# Add the forecasted data starting from the prediction date
+lines(testing_set$date, forecasts$mean, col='blue')
 
-# Plot date vs CPI_month_var, CPI_year_var, CPI_year_to_date_var
-ggplot(df_analysis_baq) +
-  geom_line(aes(x = date, y = CPI_month_var, color = "CPI Month Variation")) +
-  geom_line(aes(x = date, y = CPI_year_var, color = "CPI Year Variation")) +
-  geom_line(aes(x = date, y = CPI_year_to_date_var, color = "CPI Year to Date Variation")) +
-  labs(title = "Date vs CPI Variations",
-       x = "Date",
-       y = "CPI Variation") +
-  scale_color_manual(values = c("CPI Month Variation" = "orange", "CPI Year Variation" = "pink", "CPI Year to Date Variation" = "cyan")) +
-  theme_classic() +
-  theme(plot.title = element_text(hjust = 0.5))
+# Add the actual data for the prediction period
+lines(testing_set$date, actual_workers, col='red')
 
+# Add the SARIMAX forecasted data
+lines(testing_set_bog$date, sarimax_forecasts$mean, col='purple')
+
+# Add the SARIMAX with transformed variables forecasted data
+lines(testing_set_bog$date, sarimax_forecasts_t$mean, col='green')
+
+# Add a legend to the plot
+legend("topleft", legend=c("Actual (2016-2019)", "SARIMA Forecast (2019-07 onwards)", "Actual (2019-07 onwards)", "SARIMAX Forecast (2019-07 onward)","SARIMAX Preprocessing Forecast (2019-07 onwards)"),
+       col=c("black", "blue", "red", "purple", "green"), lty=1, cex=0.8)
 ```
-Let's fit some simple prediction models, but more research and data cleaning most be done in order to identify the best approach to our model. 
+Let's try to model an OLS model to see if we get better results with the model.
+```{r}
+# Step 1: Preparing the data for training and testing and selecting the external variables
+bogota_dataset_transformed <- bogota_dataset %>%
+  mutate(log_population_month = log(population_month.pop + 1),
+         log_IPUG = log(IPUG.mp + 1),
+         log_LP = log(LP.mp + 1),
+         log_LPE = log(LPE.mp + 1),
+         log_TotalIncome = log(TotalIncome.fp +1),
+         log_TotalExpenses = log(TotalExpenses.fp +1)) %>%
+  mutate_at(vars(MDM_Resource_Mobilization.ci, MDM_Execution_Of_Resources.ci, MDM_Open_Government_And_Transparency.ci,
+                 MDM_Territorial_Ordering.ci, MDM_Education.ci, MDM_Health_Coverage.ci, MDM_Services.ci, MDM_Security_And_Coexistence.ci,
+                 `Self-financing_of_operating_expenses.sfp`, Debt_service_support.sfp, Dependence_on_transfers_from_the_Nation_and_Royalties.sfp,
+                 Generation_of_Own_Resources.sfp, Magnitude_of_Investment.sfp, Saving_Capacity.sfp, Fiscal_Performance_Indicator.sfp),
+            ~ ./ 100) %>%
+  select(workers.geih, date, year, month, log_population_month, CPI.cpi, CPI_month_var.cpi, Enrollment_Rate_5_16.edu, Net_Coverage.edu, Pass_Rate.edu, I_PM.mp, I_PME.mp, log_IPUG, log_LP, log_LPE, Gini.mp, log_TotalIncome, log_TotalExpenses, `MDM_Resource_Mobilization.ci`, `MDM_Execution_Of_Resources.ci`, `MDM_Open_Government_And_Transparency.ci`, `MDM_Territorial_Ordering.ci`, `MDM_Education.ci`, `MDM_Health_Coverage.ci`, `MDM_Services.ci`, `MDM_Security_And_Coexistence.ci`, `Self-financing_of_operating_expenses.sfp`, `Debt_service_support.sfp`, `Dependence_on_transfers_from_the_Nation_and_Royalties.sfp`, `Generation_of_Own_Resources.sfp`, `Magnitude_of_Investment.sfp`, `Saving_Capacity.sfp`, `Fiscal_Performance_Indicator.sfp`)
+
+
+# Step 2: Split the data
+training_set_ols <- bogota_dataset_transformed %>% filter(date < as.Date("2019-07-01"))
+testing_set_ols <- bogota_dataset_transformed %>% filter(date >= as.Date("2019-07-01"))
+
+# Step 3: Model training
+model_formula <- workers.geih ~ log_population_month + CPI.cpi + CPI_month_var.cpi + Enrollment_Rate_5_16.edu +
+  Net_Coverage.edu + Pass_Rate.edu + I_PM.mp + I_PME.mp + log_IPUG + log_LP + log_LPE +
+  Gini.mp + log_TotalIncome + log_TotalExpenses +
+  `MDM_Resource_Mobilization.ci` + `MDM_Execution_Of_Resources.ci` +
+  `MDM_Open_Government_And_Transparency.ci` + `MDM_Territorial_Ordering.ci` +
+  `MDM_Education.ci` + `MDM_Health_Coverage.ci` + `MDM_Services.ci` +
+  `MDM_Security_And_Coexistence.ci` + `Self-financing_of_operating_expenses.sfp` +
+  `Debt_service_support.sfp` + `Dependence_on_transfers_from_the_Nation_and_Royalties.sfp` +
+  `Generation_of_Own_Resources.sfp` + `Magnitude_of_Investment.sfp` +
+  `Saving_Capacity.sfp` + `Fiscal_Performance_Indicator.sfp`
+ols_model <- lm(formula = model_formula, data=training_set_ols)
+
+# Summary of the model to check for results and diagnostics
+summary(ols_model)
+
+#Step 4: prediction
+# In-sample prediction
+training_set_ols$predicted <- predict(ols_model, newdata=training_set_ols)
+
+# Out-of-sample prediction
+testing_set_ols$predicted <- predict(ols_model, newdata=testing_set_ols)
+
+#Step 5: Model Evaluation
+# Check for autocorrelation in residuals
+dwtest(ols_model)
+
+# Diagnostic plots
+par(mfrow=c(2, 2))
+plot(ols_model)
+
+#Error metrics
+accuracy(training_set_ols$predicted, training_set_ols$workers.geih)
+accuracy(testing_set_ols$predicted, testing_set_ols$workers.geih)
+```
+```{r}
+# Calculate the combined range for the y-axis limits
+combined_y_range <- range(c(bogota_dataset$workers.geih, forecasts$mean, actual_workers, sarimax_forecasts$mean,sarimax_forecasts_t$mean,testing_set_ols$predicted ))
+# Set the plot with the correct limits
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', xlim=range(bogota_dataset$date), ylim=combined_y_range)
+
+# Add the forecasted data starting from the prediction date
+lines(testing_set$date, forecasts$mean, col='blue')
+
+# Add the actual data for the prediction period
+lines(testing_set$date, actual_workers, col='red')
+
+# Add the SARIMAX forecasted data
+lines(testing_set_bog$date, sarimax_forecasts$mean, col='purple')
+
+# Add the SARIMAX with transformed variables forecasted data
+lines(testing_set_bog$date, sarimax_forecasts_t$mean, col='green')
+
+# Add the OLS forecasted data
+lines(testing_set_bog$date, testing_set_ols$predicted , col='yellow')
+
+# Add a legend to the plot
+legend("topleft", legend=c("Actual (2016-2019)", "SARIMA Forecast (2019-07 onwards)", "Actual (2019-07 onwards)", "SARIMAX Forecast (2019-07 onward)","SARIMAX Preprocessing Forecast (2019-07 onwards)", "OLS Forecast (2019-07 onwards"),
+       col=c("black", "blue", "red", "purple", "green", "yellow"), lty=1, cex=0.8)
+```
+Just looking at the result data we can observe that the OLS is giving some outlandish results. Let's perform an stepwise regression in R in order to define a better model. 
 
 ```{r}
-# Split the data into training and test sets
-train <- df_analysis_baq[df_analysis_baq$date < "2023-01-01", ]
-test <- df_analysis_baq[df_analysis_baq$date >= "2023-01-01", ]
+# Step 1: Preparing the data for training and testing and selecting the external variables
+bogota_dataset_transformed <- bogota_dataset %>%
+  mutate(log_population_month = log(population_month.pop + 1),
+         log_IPUG = log(IPUG.mp + 1),
+         log_LP = log(LP.mp + 1),
+         log_LPE = log(LPE.mp + 1),
+         log_TotalIncome = log(TotalIncome.fp +1),
+         log_TotalExpenses = log(TotalExpenses.fp +1)) %>%
+  mutate_at(vars(MDM_Resource_Mobilization.ci, MDM_Execution_Of_Resources.ci, MDM_Open_Government_And_Transparency.ci,
+                 MDM_Territorial_Ordering.ci, MDM_Education.ci, MDM_Health_Coverage.ci, MDM_Services.ci, MDM_Security_And_Coexistence.ci,
+                 `Self-financing_of_operating_expenses.sfp`, Debt_service_support.sfp, Dependence_on_transfers_from_the_Nation_and_Royalties.sfp,
+                 Generation_of_Own_Resources.sfp, Magnitude_of_Investment.sfp, Saving_Capacity.sfp, Fiscal_Performance_Indicator.sfp),
+            ~ ./ 100) %>%
+  select(workers.geih, date, year, month, log_population_month, CPI.cpi, CPI_month_var.cpi, Enrollment_Rate_5_16.edu, Net_Coverage.edu, Pass_Rate.edu, I_PM.mp, I_PME.mp, log_IPUG, log_LP, log_LPE, Gini.mp, log_TotalIncome, log_TotalExpenses, `MDM_Resource_Mobilization.ci`, `MDM_Execution_Of_Resources.ci`, `MDM_Open_Government_And_Transparency.ci`, `MDM_Territorial_Ordering.ci`, `MDM_Education.ci`, `MDM_Health_Coverage.ci`, `MDM_Services.ci`, `MDM_Security_And_Coexistence.ci`, `Self-financing_of_operating_expenses.sfp`, `Debt_service_support.sfp`, `Dependence_on_transfers_from_the_Nation_and_Royalties.sfp`, `Generation_of_Own_Resources.sfp`, `Magnitude_of_Investment.sfp`, `Saving_Capacity.sfp`, `Fiscal_Performance_Indicator.sfp`)
 
-# Build the univariate model using the historical 'workers' data
-uni_model <- auto.arima(train$workers)
 
-# Forecast the 'workers' for 2024
-uni_forecast <- forecast(uni_model, h = nrow(test))
+# Step 2: Split the data
+training_set_ols_s <- bogota_dataset_transformed %>% filter(date < as.Date("2019-07-01"))
+testing_set_ols_s <- bogota_dataset_transformed %>% filter(date >= as.Date("2019-07-01"))
 
-# Build the multivariate model
-# Note: You need to check for stationarity and co-integration among variables for an accurate multivariate model.
-multi_model <- lm(workers ~ population_month + population_year + CPI + CPI_month_var + CPI_year_var + CPI_year_to_date_var, data = train)
+# Step 3: Model training
+model_formula_s <- workers.geih ~ year+ month+ log_population_month + CPI.cpi + CPI_month_var.cpi + Enrollment_Rate_5_16.edu +
+  Net_Coverage.edu + Pass_Rate.edu + I_PM.mp + I_PME.mp + log_IPUG + log_LP + log_LPE +
+  Gini.mp + log_TotalIncome + log_TotalExpenses +
+  `MDM_Resource_Mobilization.ci` + `MDM_Execution_Of_Resources.ci` +
+  `MDM_Open_Government_And_Transparency.ci` + `MDM_Territorial_Ordering.ci` +
+  `MDM_Education.ci` + `MDM_Health_Coverage.ci` + `MDM_Services.ci` +
+  `MDM_Security_And_Coexistence.ci` + `Self-financing_of_operating_expenses.sfp` +
+  `Debt_service_support.sfp` + `Dependence_on_transfers_from_the_Nation_and_Royalties.sfp` +
+  `Generation_of_Own_Resources.sfp` + `Magnitude_of_Investment.sfp` +
+  `Saving_Capacity.sfp` + `Fiscal_Performance_Indicator.sfp`
+ols_model_s <- lm(formula = model_formula_s, data=training_set_ols)
 
-# Forecast 'workers' for 2024 using the multivariate model
-# For multivariate models, we don't have a direct function like forecast(), so we have to predict manually.
-test$predicted_workers <- predict(multi_model, newdata = test)
+# Perform stepwise regression
+stepwise_model <- step(ols_model_s, direction = "both", trace = FALSE)
 
-# Evaluate the models
-# For the univariate model
-accuracy(uni_forecast, test$workers)
+# Summary of the model to check for results and diagnostics
+summary(stepwise_model)
 
-# For the multivariate model
-multi_accuracy <- with(test, mean((workers - predicted_workers)^2)) # Mean Squared Error
+#Step 4: prediction
+# In-sample prediction
+training_set_ols_s$predicted <- predict(stepwise_model, newdata=training_set_ols_s)
 
-# Visualization
-plot(test$date, test$workers, type = "l", col = "blue", xlab = "Date", ylab = "Workers", main = "Actual vs Predicted Workers for Barranquilla in 2024")
-lines(test$date, uni_forecast$mean, col = "red")
-lines(test$date, test$predicted_workers, col = "black")
-legend("topleft", legend = c("Actual", "Univariate", "Multivariate"), col = c("blue", "red", "black"), lty = 1)
+# Out-of-sample prediction
+testing_set_ols_s$predicted <- predict(stepwise_model, newdata=testing_set_ols_s)
+
+#Step 5: Model Evaluation
+# Check for autocorrelation in residuals
+dwtest(stepwise_model)
+
+# Diagnostic plots
+par(mfrow=c(2, 2))
+plot(stepwise_model)
+
+#Error metrics
+accuracy(training_set_ols_s$predicted, training_set_ols_s$workers.geih)
+accuracy(testing_set_ols_s$predicted, testing_set_ols_s$workers.geih)
 ```
+```{r}
+# Calculate the combined range for the y-axis limits
+combined_y_range <- range(c(bogota_dataset$workers.geih, forecasts$mean, actual_workers, sarimax_forecasts$mean,sarimax_forecasts_t$mean,testing_set_ols_s$predicted ))
+# Set the plot with the correct limits
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', xlim=range(bogota_dataset$date), ylim=combined_y_range)
+
+# Add the forecasted data starting from the prediction date
+lines(testing_set$date, forecasts$mean, col='blue')
+
+# Add the actual data for the prediction period
+lines(testing_set$date, actual_workers, col='red')
+
+# Add the SARIMAX forecasted data
+lines(testing_set_bog$date, sarimax_forecasts$mean, col='purple')
+
+# Add the SARIMAX with transformed variables forecasted data
+lines(testing_set_bog$date, sarimax_forecasts_t$mean, col='green')
+
+# Add the OLS forecasted data
+lines(testing_set_bog$date, testing_set_ols_s$predicted , col='yellow')
+
+# Add a legend to the plot
+legend("topleft", legend=c("Actual (2016-2019)", "SARIMA Forecast (2019-07 onwards)", "Actual (2019-07 onwards)", "SARIMAX Forecast (2019-07 onward)","SARIMAX Preprocessing Forecast (2019-07 onwards)", "OLS Forecast (2019-07 onwards"),
+       col=c("black", "blue", "red", "purple", "green", "yellow"), lty=1, cex=0.8)
+```
+Let's try to do an OLS Prediction with less variables
+```{r}
+# Step 1: Preparing the data for training and testing and selecting the external variables
+bogota_dataset_transformed <- bogota_dataset %>%
+  mutate(log_population_month = log(population_month.pop + 1),
+         log_IPUG = log(IPUG.mp + 1),
+         log_LP = log(LP.mp + 1),
+         log_LPE = log(LPE.mp + 1),
+         log_TotalIncome = log(TotalIncome.fp +1),
+         log_TotalExpenses = log(TotalExpenses.fp +1),
+         log_workers = log(workers.geih + 1)) %>%
+  mutate_at(vars(MDM_Resource_Mobilization.ci, MDM_Execution_Of_Resources.ci, MDM_Open_Government_And_Transparency.ci,
+                 MDM_Territorial_Ordering.ci, MDM_Education.ci, MDM_Health_Coverage.ci, MDM_Services.ci, MDM_Security_And_Coexistence.ci,
+                 `Self-financing_of_operating_expenses.sfp`, Debt_service_support.sfp, Dependence_on_transfers_from_the_Nation_and_Royalties.sfp,
+                 Generation_of_Own_Resources.sfp, Magnitude_of_Investment.sfp, Saving_Capacity.sfp, Fiscal_Performance_Indicator.sfp),
+            ~ ./ 100) %>%
+  select(log_workers, workers.geih, date, year, month, `MDM_Resource_Mobilization.ci`, `MDM_Execution_Of_Resources.ci`, `MDM_Open_Government_And_Transparency.ci`, `MDM_Territorial_Ordering.ci`, `MDM_Education.ci`, `MDM_Health_Coverage.ci`, `MDM_Services.ci`, `MDM_Security_And_Coexistence.ci`, `Self-financing_of_operating_expenses.sfp`, `Debt_service_support.sfp`, `Dependence_on_transfers_from_the_Nation_and_Royalties.sfp`, `Generation_of_Own_Resources.sfp`, `Magnitude_of_Investment.sfp`, `Saving_Capacity.sfp`, `Fiscal_Performance_Indicator.sfp`)
+
+
+# Step 2: Split the data
+training_set_ols_s2 <- bogota_dataset_transformed %>% filter(date < as.Date("2019-07-01"))
+testing_set_ols_s2 <- bogota_dataset_transformed %>% filter(date >= as.Date("2019-07-01"))
+
+# Step 3: Model training
+model_formula_s2 <- log_workers ~ 
+  `Self-financing_of_operating_expenses.sfp` +
+  `Debt_service_support.sfp` + `Dependence_on_transfers_from_the_Nation_and_Royalties.sfp` +
+  `Generation_of_Own_Resources.sfp` + `Magnitude_of_Investment.sfp` +
+  `Saving_Capacity.sfp` + `Fiscal_Performance_Indicator.sfp`
+ols_model_s2 <- lm(formula = model_formula_s2, data=training_set_ols_s2)
+
+# Perform stepwise regression
+stepwise_model2 <- step(ols_model_s2, direction = "both", trace = FALSE)
+
+# Summary of the model to check for results and diagnostics
+summary(stepwise_model2)
+
+# Step 4: prediction
+# In-sample prediction (on log scale)
+training_set_ols_s2$predicted_log <- predict(stepwise_model2, newdata=training_set_ols_s2)
+
+# Out-of-sample prediction (on log scale)
+testing_set_ols_s2$predicted_log <- predict(stepwise_model2, newdata=testing_set_ols_s2)
+
+# Convert predictions back to original scale
+training_set_ols_s2$predicted <- exp(training_set_ols_s2$predicted_log) - 1
+testing_set_ols_s2$predicted <- exp(testing_set_ols_s2$predicted_log) - 1
+
+# Step 5: Model Evaluation
+# Check for autocorrelation in residuals
+dwtest(stepwise_model2)
+
+# Diagnostic plots
+par(mfrow=c(2, 2))
+plot(stepwise_model2)
+
+# Error metrics (comparing back-transformed predictions with actual values)
+accuracy(training_set_ols_s2$predicted, training_set_ols_s2$workers.geih)
+accuracy(testing_set_ols_s2$predicted, testing_set_ols_s2$workers.geih)
+```
+```{r}
+# Calculate the combined range for the y-axis limits
+combined_y_range <- range(c(bogota_dataset$workers.geih, forecasts$mean, actual_workers,testing_set_ols_s2$predicted ))
+# Set the plot with the correct limits
+plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', xlim=range(bogota_dataset$date), ylim=combined_y_range)
+
+# Add the forecasted data starting from the prediction date
+lines(testing_set$date, forecasts$mean, col='blue')
+
+# Add the actual data for the prediction period
+lines(testing_set$date, actual_workers, col='red')
+
+# Add the OLS forecasted data
+lines(testing_set_ols_s2$date, testing_set_ols_s2$predicted , col='yellow')
+
+# Add a legend to the plot
+legend("topleft", legend=c("Actual (2016-2019)","SARIMA Forecast (2019-07) onwards", "Actual (2019-07 onwards)", "OLS_2 Forecast (2019-07) onwards"),
+       col=c("black", "blue", "red", "yellow"), lty=1, cex=0.8)
+```
+
+
+
 - ME (Mean Error): Measures the average forecast error. Values close to 0 are preferable.
 - RMSE (Root Mean Squared Error): Gives the standard deviation of the residuals, measuring how far the data points are from the model's predicted values. Lower values indicate a better fit.
 - MAE (Mean Absolute Error): Similar to RMSE but uses absolute differences. It's easier to interpret than RMSE as it's on the same scale as the data.
