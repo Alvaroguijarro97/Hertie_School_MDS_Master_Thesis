@@ -21,117 +21,55 @@ library(writexl)
 ```
 
 ```{r read datasets}
-oec_municipios <- read_excel("OEC histórico 2000-2022 municipios.xlsx") 
-#Operación Efectiva de Caja 2000-2022, valores en Millions of Pesos / Cash Operations 2000-2022, values in Millions of Pesos
-head(oec_municipios)
-colnames(oec_municipios)
+sfp <- read_excel("Score_Fiscal_Performance_2015-2022.xlsx") 
+#Resumen Indice Desempeño fiscal 2015-2022, puntajes del 1-100 / Summary of Fiscal Performance Index 2015-2022, scores from 1-100
+head(sfp)
+colnames(sfp)
 ```
 
 ```{r translating column names}
 # Set new column names in English with explanations
-colnames(oec_municipios) <- c(
-  "Order", # Orden: The sequence or order of the data entry.
-  "Department", # Departamento: The department or state to which the municipality belongs.
-  "Key", # Llave: A unique identifier or key for each entry.
-  "MunicipalityCode", # Código Municipio: The unique code for each municipality.
-  "city", # Nombre Municipio: The name of the municipality.
-  "year", # Año: The year of the data entry.
-  "TotalIncome", # Ingresos Totales: Total income received.
-  "CurrentIncome", # Ingresos Corrientes: Current (or operational) income.
-  "TaxIncome", # Ingresos tributarios: Income received from taxes.
-  "PropertyTax", # Predial: Property tax income.
-  "IndustryAndCommerceTax", # Industria y comercio: Tax from industry and commerce activities.
-  "FuelSurcharge", # Sobretasa a la gasolina: Surcharge on fuel.
-  "OtherTaxIncome", # Otros ingresos tributarios: Other tax-related income.
-  "NonTaxIncome", # Ingresos No Tributarios: Non-tax related income.
-  "CurrentTransfers", # Transferencias corrientes: Current transfers received.
-  "NationalLevelCurrentTransfers", # Transferencias corrientes de nivel nacional: Current transfers from the national level.
-  "OtherTransfers", # Otras transferencias: Other transfers.
-  "TotalExpenses", # GASTOS TOTALES: Total expenses.
-  "CurrentExpenses", # Gastos Corrientes: Current (or operational) expenses.
-  "OperatingExpenses", # Gastos de funcionamiento: Operating expenses.
-  "PersonalServices", # Servicios personales: Expenses on personal services.
-  "GeneralExpenses", # Gastos generales: General expenses.
-  "TransfersPaid", # Transferencias pagadas: Transfers paid out.
-  "PublicDebtInterests", # Intereses de la deuda pública: Interests on public debt.
-  "CurrentDissaving/Saving", # Desahorro/Ahorro corriente: Current dissaving or saving.
-  "CapitalIncome", # Ingresos de Capital: Income from capital.
-  "Royalties", # Regalías: Income from royalties.
-  "NationalTransfers", # Transferencias nacionales: Transfers from the national level.
-  "Co-financing", # Cofinanciación: Co-financing.
-  "OtherCapitalIncome", # Otros ingresos de capital: Other capital income.
-  "CapitalExpenses", # Gastos de Capital: Capital expenses.
-  "GrossCapitalFormation", # Formación bruta de capital: Gross capital formation.
-  "OtherCapitalExpenses", # Otros gastos de capital: Other capital expenses.
-  "TotalDeficitOrSurplus", # Déficit o Superávit Total: Total deficit or surplus.
-  "FINANCING", # FINANCIAMIENTO: Financing.
-  "NetCredit", # Crédito neto: Net credit.
-  "Disbursements", # Desembolsos: Disbursements.
-  "Amortizations", # Amortizaciones: Amortizations.
-  "BalanceResources_VariationInDepositsAndOthers" # Recursos del Balance, Variación de Depósitos y Otros: Balance resources, variation in deposits, and others.
-)
+colnames(sfp) <- c(
+  "year", # Año: Year the score was calculated.
+  "code", # Codigo: The unique code for each municipality
+  "city", # Municipio: The name of the municipality.
+  "Self-financing_of_operating_expenses", # 1/ Autofinanciación de los gastos de funcionamiento: Self-financing of operating expenses: the ability to cover the operating expenses of the central administration with unrestricted income (Law 617 of 2000)
+  "Debt_service_support", #2/ Respaldo del servicio de la deuda: Debt service support: the ability to support debt service with perceived revenues.
+  "Dependence_on_transfers_from_the_Nation_and_Royalties", #3/ Dependencia de las transferencias de la Nación y las Regalías: Dependence on transfers from the Nation and Royalties: measures the importance of national transfers and royalties (SGR) in total revenues.
+  "Generation_of_Own_Resources", #4/ Generación de recursos propios:Generation of Own Resources: the ability to generate resources complementary to the transfers.
+  "Magnitude_of_Investment", #5/ Magnitud de la inversión: Magnitude of Investment: quantifies the magnitude of the investment executed by the territorial entity.
+  "Saving_Capacity", #6/ Capacidad de ahorro: Saving Capacity: determines the degree to which surpluses are freed up to finance investment.
+  "Fiscal_Performance_Indicator", #7/ Indicador de desempeño Fiscal : 7_Fiscal_Performance_Indicator
+  "Classification Range" #Rango Clasificación: Classification Range
+ )
 ```
 
-```{r filter only relevant cities and deal with Na's}
-unique(oec_municipios$city)
-cities_to_include <- c("BARRANQUILLA", "BOGOTA D.C.", "BUCARAMANGA", 
-                       "CALI", "CARTAGENA", "CUCUTA", "IBAGUE", "MANIZALES", "MEDELLIN", 
-                       "MONTERIA", "PASTO", "PEREIRA", "VILLAVICENCIO")
-oec_municipios_filtered <- oec_municipios[oec_municipios$city %in% cities_to_include, ]
-
-#Set Na's to 0 
-oec_municipios_filtered <- oec_municipios_filtered %>%
-  mutate(across(where(is.numeric), ~replace_na(., 0)), # Replace NA with 0 in numeric columns
-         across(where(is.character), ~replace_na(., ""))) # Replace NA with empty string in character columns
-
+```{r }
+unique(sfp$city)
 
 # View the filtered dataset
-head(oec_municipios_filtered)
-unique(oec_municipios_filtered$city)
+head(sfp)
 
-# Identify rows with any empty cells (NA values)
-rows_with_empty_cells <- oec_municipios_filtered %>% 
-  filter(apply(., 1, anyNA))
-
-# View the rows with empty cells
-rows_with_empty_cells
-
-
-city_transform <- c(
-  "BARRANQUILLA" = "BARRANQUILLA A.M.",
-  "BOGOTA D.C." = "BOGOTÁ D.C.",
-  "BUCARAMANGA" = "BUCARAMANGA A.M.",
-  "CALI" = "CALI A.M.",
-  "CARTAGENA" = "CARTAGENA",
-  "CUCUTA" = "CÚCUTA A.M.",
-  "IBAGUE" = "IBAGUÉ",
-  "MANIZALES" = "MANIZALES A.M.",
-  "MEDELLIN" = "MEDELLÍN A.M.",
-  "MONTERIA" = "MONTERÍA",
-  "PASTO" = "PASTO",
-  "PEREIRA" = "PEREIRA A.M.",
-  "VILLAVICENCIO" = "VILLAVICENCIO"
-)
-oec_municipios_filtered <- oec_municipios_filtered %>%
-  mutate(city = recode(city, !!!city_transform))  %>%
+sfp_filtered <- sfp %>%
   arrange(city, year) %>%
-  select(-Order,-Department,-Key,-MunicipalityCode)
+  select(-code)
+
+sfp_filtered
 ```
 
 ```{r visualize the data}
 # Define the list of variables to loop over
-variables_list <- c("TotalIncome", "CurrentIncome","TaxIncome","PropertyTax", "IndustryAndCommerceTax","FuelSurcharge", "OtherTaxIncome", "NonTaxIncome", "CurrentTransfers", "NationalLevelCurrentTransfers","OtherTransfers","TotalExpenses","CurrentExpenses","OperatingExpenses","PersonalServices","GeneralExpenses",
-  "TransfersPaid","PublicDebtInterests", "CurrentDissaving/Saving","CapitalIncome","Royalties","NationalTransfers","Co-financing","OtherCapitalIncome", "CapitalExpenses","GrossCapitalFormation","OtherCapitalExpenses","TotalDeficitOrSurplus","FINANCING","NetCredit","Disbursements","Amortizations", "BalanceResources_VariationInDepositsAndOthers")
+variables_list <- c("Self-financing_of_operating_expenses","Debt_service_support","Dependence_on_transfers_from_the_Nation_and_Royalties","Generation_of_Own_Resources","Magnitude_of_Investment","Saving_Capacity","Fiscal_Performance_Indicator")
 
 # Create the interactive plot directly with plotly
-plotly_obj <- plot_ly(data = oec_municipios_filtered, x = ~year, y = ~TotalIncome, 
+plotly_obj <- plot_ly(data = sfp_filtered, x = ~year, y = ~Fiscal_Performance_Indicator, 
                       color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
                       type = 'scatter', mode = 'lines+markers',
                       text = ~city, hoverinfo = 'text+x+y') %>%
-  layout(title = "Total Income by City from 2000 to 2022",
+  layout(title = "Fiscal Performance Score by City from 2015 to 2022",
          xaxis = list(title = "Year"),
-         yaxis = list(title = "Income, values in $ Millions of Pesos", tickformat = ",d", 
-                      range = c(0, max(oec_municipios_filtered$TotalIncome, na.rm = TRUE))),
+         yaxis = list(title = "Score", 
+                      range = c(0, 100, na.rm = TRUE)),
          legend = list(orientation = "v", x = 1.05, y = 1))
 
 # Display the interactive plot
@@ -142,7 +80,7 @@ plotly_obj
 # Loop over each variable and create a plot
 plot_list <- lapply(variables_list, function(variable) {
   # Filter the dataset for the variable
-  data_variable <- oec_municipios_filtered %>%
+  data_variable <- sfp_filtered %>%
     select(city, year, value = .data[[variable]])
   
   # Start the plot with non-December data
@@ -157,7 +95,7 @@ plot_list <- lapply(variables_list, function(variable) {
               title = paste(gsub("_", " ", variable), "Evolution by City"),
               xaxis = list(title = "Date"),
               yaxis = list(title = paste(gsub("_", " ", variable)),
-                        range = c(0, max(oec_municipios_filtered[[variable]], na.rm = TRUE))),
+                        range = c(0, max(sfp_filtered[[variable]], na.rm = TRUE))),
               legend = list(orientation = 'v', x = 1.05, y = 1))
   
   return(p)
@@ -215,49 +153,25 @@ interpolate_city <- function(data_city, columns_to_interpolate) {
 }
 
 # Define the columns to interpolate
-columns_to_interpolate <- c("TotalIncome", 
-  "CurrentIncome", 
-  "TaxIncome", 
-  "PropertyTax", 
-  "IndustryAndCommerceTax", 
-  "FuelSurcharge", 
-  "OtherTaxIncome", 
-  "NonTaxIncome", 
-  "CurrentTransfers", 
-  "NationalLevelCurrentTransfers", 
-  "OtherTransfers", 
-  "TotalExpenses", 
-  "CurrentExpenses", 
-  "OperatingExpenses", 
-  "PersonalServices", 
-  "GeneralExpenses", 
-  "TransfersPaid", 
-  "PublicDebtInterests", 
-  "CurrentDissaving/Saving", 
-  "CapitalIncome", 
-  "Royalties", 
-  "NationalTransfers", 
-  "Co-financing", 
-  "OtherCapitalIncome", 
-  "CapitalExpenses", 
-  "GrossCapitalFormation", 
-  "OtherCapitalExpenses", 
-  "TotalDeficitOrSurplus", 
-  "FINANCING", 
-  "NetCredit", 
-  "Disbursements", 
-  "Amortizations", 
-  "BalanceResources_VariationInDepositsAndOthers")
+columns_to_interpolate <- c("Self-financing_of_operating_expenses","Debt_service_support","Dependence_on_transfers_from_the_Nation_and_Royalties","Generation_of_Own_Resources","Magnitude_of_Investment","Saving_Capacity","Fiscal_Performance_Indicator")
 
 # Apply the interpolation to each city and combine the results
-monthly_data <- oec_municipios_filtered %>%
+monthly_data <- sfp_filtered %>%
   group_by(city) %>%
   group_map(~interpolate_city(.x, columns_to_interpolate), .keep = TRUE) %>%
-  bind_rows()
+  bind_rows() %>%
+  mutate(Category = case_when(
+    Fiscal_Performance_Indicator > 80 ~ "Solvent >80 points",
+    Fiscal_Performance_Indicator > 70 & Fiscal_Performance_Indicator <= 80 ~ "Sustainable between 70-80 points",
+    Fiscal_Performance_Indicator > 60 & Fiscal_Performance_Indicator <= 70 ~ "Vulnerable between 60 and 70 points",
+    Fiscal_Performance_Indicator > 40 & Fiscal_Performance_Indicator <= 60 ~ "At Risk between 40 and 60 points",
+    Fiscal_Performance_Indicator <= 40 ~ "Deterioration <=40 points",
+    TRUE ~ NA_character_ # For any case that doesn't fit the above, although this shouldn't happen with your scoring system
+  ))
 
 #Filter the data by date range
 monthly_data <- monthly_data %>%
-   filter(date >= as.Date("2000-12-01") & date <= as.Date("2023-12-31"))
+   filter(date >= as.Date("2015-12-01") & date <= as.Date("2023-12-31"))
 head(monthly_data)
 ```
 ```{r}
@@ -265,8 +179,7 @@ head(monthly_data)
 monthly_data$Is_December <- format(monthly_data$date, "%m") == "12"
 
 # Define the list of variables to loop over
-variables_list <- c("TotalIncome", "CurrentIncome","TaxIncome","PropertyTax", "IndustryAndCommerceTax","FuelSurcharge", "OtherTaxIncome", "NonTaxIncome", "CurrentTransfers", "NationalLevelCurrentTransfers","OtherTransfers","TotalExpenses","CurrentExpenses","OperatingExpenses","PersonalServices","GeneralExpenses",
-  "TransfersPaid","PublicDebtInterests", "CurrentDissaving/Saving","CapitalIncome","Royalties","NationalTransfers","Co-financing","OtherCapitalIncome", "CapitalExpenses","GrossCapitalFormation","OtherCapitalExpenses","TotalDeficitOrSurplus","FINANCING","NetCredit","Disbursements","Amortizations", "BalanceResources_VariationInDepositsAndOthers")
+variables_list <- c("Self-financing_of_operating_expenses","Debt_service_support","Dependence_on_transfers_from_the_Nation_and_Royalties","Generation_of_Own_Resources","Magnitude_of_Investment","Saving_Capacity","Fiscal_Performance_Indicator")
 
 # Loop over each variable and create a plot
 plot_list <- lapply(variables_list, function(variable) {
@@ -320,7 +233,7 @@ min_date <- min(final_monthly_data$date)
 max_date <- max(final_monthly_data$date)
 
 # Create the filename using the min and max dates
-filename <- paste0("Fiscal_Performance_cleaned_", min_date, "-", max_date, ".xlsx")
+filename <- paste0("Score_Fiscal_Performance_cleaned_", min_date, "-", max_date, ".xlsx")
 
 # Write the dataframe to an Excel file
 write_xlsx(final_monthly_data, filename)
