@@ -27,6 +27,7 @@ library(rvest)
 library(caret)
 library(progress)
 library(lmtest)
+library(car)
 ```
 
 
@@ -769,8 +770,8 @@ training_set_ols_s <- bogota_dataset_transformed %>% filter(date < as.Date("2019
 testing_set_ols_s <- bogota_dataset_transformed %>% filter(date >= as.Date("2019-07-01"))
 
 # Step 3: Model training
-model_formula_s <- workers.geih ~ year+ month+ log_population_month + CPI.cpi + CPI_month_var.cpi + Enrollment_Rate_5_16.edu +
-  Net_Coverage.edu + Pass_Rate.edu + I_PM.mp + I_PME.mp + log_IPUG + log_LP + log_LPE +
+model_formula_s <- workers.geih ~ year+ month+ log_population_month + CPI.cpi + CPI_month_var.cpi +
+  Net_Coverage.edu + I_PM.mp + I_PME.mp + log_IPUG + log_LP + log_LPE +
   Gini.mp + log_TotalIncome + log_TotalExpenses +
   `MDM_Resource_Mobilization.ci` + `MDM_Execution_Of_Resources.ci` +
   `MDM_Open_Government_And_Transparency.ci` + `MDM_Territorial_Ordering.ci` +
