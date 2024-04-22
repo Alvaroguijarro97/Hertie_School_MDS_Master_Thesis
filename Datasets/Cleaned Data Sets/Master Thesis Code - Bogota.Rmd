@@ -606,7 +606,7 @@ rmse_sig <- sqrt(mean((test_data_bog$predicted_workers_sig - test_data_bog$worke
 cat("MAE significant variables:", mae_sig, "\n")
 cat("RMSE significant variables:", rmse_sig, "\n")
 ```
-Even though the MAE and RMSE Result show an improvement, we can visually see that the model is not effectively predicting our workers variable. We are goin to analyze another more robust prediction models that might capture better the behaviour of our variables and could produce more trustworthy predictions. In this case we are going to analyze ARIMA, SARIMA, and SARIMAX models. 
+Even though the MAE and RMSE Result show an improvement, we can visually see that the model is not effectively predicting our workers variable. We are going to analyze another more robust prediction models that might capture better the behavior of our variables and could produce more trustworthy predictions. In this case we are going to analyze ARIMA, SARIMA, and Random Forrest models. 
 
 Let's start with an ARIMA model, which stands for  *A*utoreg*r*essive *I*ntegrated *M*oving *A*verage. This is a class of satistical model used for analyzing and forecasting time series data. It has 3 main components:
 1) AR(Autoregressive) - p : Involves using the past values of the time series to predict the future values.
@@ -1269,26 +1269,10 @@ if(length(feature_names) == nrow(importance)) {
   warning("Mismatch in number of features and importance scores.")
 }
 
-
-```
-```{r}
-# Ensure feature names are available
-feature_names <- colnames(train_data_rf[-which(colnames(train_data_rf) == "workers.geih")])
-
-# Check if the feature importance can be matched to feature names
-if(length(feature_names) == ncol(importance)) {
-  barplot(importance, names.arg = feature_names, main="Feature Importance in Random Forest Model", las=2)
-} else {
-  warning("Mismatch in number of features and importance scores.")
-}
-
 ```
 
 
-
 ```{r}
-# Assuming the models have been fit as described in your extensive script
-
 # Helper function to extract variables from a linear model
 extract_lm_vars <- function(model) {
   return(names(coef(model)))

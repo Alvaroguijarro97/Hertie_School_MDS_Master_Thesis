@@ -364,7 +364,7 @@ plotly_obj <- plot_ly(data = employed_data, x = ~date, y = ~workers.geih,
 # Display the interactive plot
 plotly_obj
 ```
-Let's see each city individually_
+Let's see each city individually:
 ```{r}
 # Unique cities
 cities <- unique(employed_data$city)
@@ -387,41 +387,41 @@ for (city in cities) {
 }
 ```
 
-For trials, let's do a model analysis for one city only. We'll use Bogota as our first option for the analysis. 
+Let's proceed to work on the prediction for the city of MEDELLÍN A.M.
 ```{r}
-bogota_dataset <- employed_data %>%
-  filter( employed_data$city == "BOGOTÁ D.C.") %>%
+medellin_dataset <- employed_data %>%
+  filter( employed_data$city == "MEDELLÍN A.M.") %>%
   select(-city, -eco_activity, -Category.sfp, -lat.ll, -lat_z.ll, -lng.ll, -lng_z.ll)
-bogota_dataset
+medellin_dataset
 ```
 Let's see again how does our variable of interest looks like: 
 ```{r}
-bogota_dataset$date <- as.Date(paste0(bogota_dataset$date, "-01"), format = "%Y-%m-%d")
-plot(bogota_dataset$date, bogota_dataset$workers.geih, type='l', main='Evolution of workers during 2016-12 and 2019-12', xlab='Date', ylab='Number of Workers')
+medellin_dataset$date <- as.Date(paste0(medellin_dataset$date, "-01"), format = "%Y-%m-%d")
+plot(medellin_dataset$date, medellin_dataset$workers.geih, type='l', main='Evolution of workers during 2016-12 and 2019-12', xlab='Date', ylab='Number of Workers')
 ```
 There appears to be an upward trend to employed workers, with some peaks and valleys through out our time span. As a trial, let's just try to fit an OLS model with the variables we have at the moment.
 
 ```{r}
 # Basic OLS model fitting
-bog_basic_ols <- lm(workers.geih ~ . - date, data = bogota_dataset)
-summary(bog_basic_ols)
+med_basic_ols <- lm(workers.geih ~ . - date, data = medellin_dataset)
+summary(med_basic_ols)
 
 # Check for multicollinearity
-vif(bog_basic_ols)
+vif(med_basic_ols)
 ```
 Right now we have too many variables and too few observation points, which is causing an over fitting of the model. Let's select what we suspect are the most important variables from each of our datasets and reduce the number of variables that way. 
 ```{r}
 selected_variables <- c("workers.geih","date", "year", "month", "population_month.pop", "population_year.pop", "CPI.cpi", "CPI_month_var.cpi", "Enrollment_Rate_5_16.edu", "Net_Coverage.edu", "Pass_Rate.edu", "I_PM.mp", "I_PME.mp", "Gini.mp", "IPUG.mp", "LP.mp", "LPE.mp", "MDM_Resource_Mobilization.ci", "MDM_Execution_Of_Resources.ci", "MDM_Open_Government_And_Transparency.ci", "MDM_Territorial_Ordering.ci", "MDM_Education.ci", "MDM_Health_Coverage.ci", "MDM_Services.ci", "MDM_Security_And_Coexistence.ci", "TotalIncome.fp", "TotalExpenses.fp", "Self_financing_of_operating_expenses.sfp", "Debt_service_support.sfp", "Dependence_on_transfers_from_the_Nation_and_Royalties.sfp", "Generation_of_Own_Resources.sfp", "Magnitude_of_Investment.sfp", "Saving_Capacity.sfp", "Fiscal_Performance_Indicator.sfp")
 
 # Subset the dataframe using the vector of selected variables
-bogota_dataset_subset <- bogota_dataset[, selected_variables]
+medellin_dataset_subset <- medellin_dataset[, selected_variables]
 
 #Let's run some tests to see what is the distribution of our prediction variable
-hist(bogota_dataset_subset$workers.geih, main = "Histogram of Number of Workers", xlab = "Number of Workers", breaks = "Sturges")
-qqnorm(bogota_dataset_subset$workers.geih)
-qqline(bogota_dataset_subset$workers.geih, col = "red")
-shapiro.test(bogota_dataset_subset$workers.geih)
-summary(bogota_dataset_subset$workers.geih)
+hist(medellin_dataset_subset$workers.geih, main = "Histogram of Number of Workers", xlab = "Number of Workers", breaks = "Sturges")
+qqnorm(medellin_dataset_subset$workers.geih)
+qqline(medellin_dataset_subset$workers.geih, col = "red")
+shapiro.test(medellin_dataset_subset$workers.geih)
+summary(medellin_dataset_subset$workers.geih)
 ```
 
 Now that we have a smaller subset of variables, let's evaluate the relationship they have to our variable of interest. Let's perform an EDA and test the assumptions necessary for linear regression. 
@@ -432,13 +432,13 @@ variables <- c("year", "month", "population_month.pop", "population_year.pop", "
 for (variable in variables) {
   # Fit a linear model for each variable
   formula <- as.formula(paste("workers.geih ~", variable))
-  model <- lm(formula, data = bogota_dataset_subset)
+  model <- lm(formula, data = medellin_dataset_subset)
   
   # Calculate R-squared value
   r_squared <- summary(model)$r.squared
   
   # Create the plot
-  g <- ggplot(bogota_dataset_subset, aes_string(x = variable, y = "workers.geih")) +
+  g <- ggplot(medellin_dataset_subset, aes_string(x = variable, y = "workers.geih")) +
     geom_point() +
     geom_smooth(method = "lm", se = FALSE, color = "blue") +
     labs(title = paste("Relationship between", variable, "and Number of Workers"),
@@ -455,65 +455,65 @@ Seeing these plots we can see what sort of relationship our variables have with 
 
 ```{r}
 #First, let's split the data into training and testing
-bogota_dataset_subset$date <- as.Date(paste0(bogota_dataset_subset$date, "-01"), format = "%Y-%m-%d")
-train_data_bog <- bogota_dataset_subset[bogota_dataset_subset$date < as.Date("2019-07-01"), ]
-test_data_bog <- bogota_dataset_subset[bogota_dataset_subset$date >= as.Date("2019-07-01"), ]
+medellin_dataset_subset$date <- as.Date(paste0(medellin_dataset_subset$date, "-01"), format = "%Y-%m-%d")
+train_data_med <- medellin_dataset_subset[medellin_dataset_subset$date < as.Date("2019-07-01"), ]
+test_data_med <- medellin_dataset_subset[medellin_dataset_subset$date >= as.Date("2019-07-01"), ]
 
 #let's fit a model
-model_bog <- lm(workers.geih ~ . - date, data = train_data_bog)
+model_med <- lm(workers.geih ~ . - date, data = train_data_med)
 
 # Summarize the model to look at coefficients
-summary(model_bog)
+summary(model_med)
 
 ```
-We have too many variables right now for out model, even though it is statistically significant (p value < 0.05), the high R-square of 0.9491 suggest some sort of over-fitting. Let's do a stepwise regression for our model, in which we can automatically select the most important variables for this model. 
+We have too many variables right now for out model, even though it is statistically significant (p value < 0.05), the high R-square of 0.9634 suggest some sort of over-fitting. Let's do a stepwise regression for our model, in which we can automatically select the most important variables for this model. 
 
 ```{r}
-model_bog <- lm(workers.geih ~ . - date, data = train_data_bog)
-stepwise_model_bog <- step(model_bog, direction = "both", trace = FALSE)
+model_med <- lm(workers.geih ~ . - date, data = train_data_med)
+stepwise_model_med <- step(model_med, direction = "both", trace = FALSE)
 
 # Print the summary of the final model
-summary(stepwise_model_bog)
+summary(stepwise_model_med)
 ```
 Let's evaluate how this model performed.
 ```{r}
 # Predicting with the stepwise model
-test_data_bog$predicted_workers <- predict(stepwise_model_bog, newdata = test_data_bog)
+test_data_med$predicted_workers <- predict(stepwise_model_med, newdata = test_data_med)
 
-# Plot the actual data for the complete dataset
-plot(bogota_dataset_subset$date, bogota_dataset_subset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers')
+# Find the full range of values for workers including both actual values and predictions
+full_range <- range(c(medellin_dataset_subset$workers.geih, mean(test_data_med$predicted_workers)))
 
-# Add the forecasted data starting from the prediction date
-lines(test_data_bog$date, test_data_bog$predicted_workers, col='red')
+# Plot the actual data with the adjusted y limits
+plot(medellin_dataset_subset$date, medellin_dataset_subset$workers.geih, type='l', col='black',
+     xlab='Date', ylab='Number of Workers', xlim=range(medellin_dataset_subset$date), ylim=full_range, 
+     main='Evolution of workers during 2016-12 and 2019-12')
 
-# Add a legend to the plot
+# Add the OLS predictions to the plot
+lines(test_data_med$date, test_data_med$predicted_workers, col='red')
+
+# Add the legend
 legend("topleft", legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)"),
        col=c("black", "red"), lty=1, cex=0.8)
-
-
-# Ensure the plot has the correct limits
-xlim <- range(bogota_dataset_subset$date)
-ylim <- range(c(bogota_dataset_subset$workers.geih, test_data_bog$predicted_workers))
 ```
 Visually we can see that the model is not predicting correctly, let's run the OLS Assumption test to identify what type of changes we would have to apply to our data.
 
 ```{r}
 # Normality - Shapiro-Wilk normality test on model residuals
-shapiro.test(resid(stepwise_model_bog))
+shapiro.test(resid(stepwise_model_med))
 
 # Homoscedasticity - Plot residuals vs. fitted values
-plot(fitted(stepwise_model_bog), resid(stepwise_model_bog), xlab = "Fitted Values", ylab = "Residuals")
+plot(fitted(stepwise_model_med), resid(stepwise_model_med), xlab = "Fitted Values", ylab = "Residuals")
 abline(h = 0, col = "red")
 
 # Independence - Durbin-Watson test for autocorrelation
-dwtest(stepwise_model_bog)
+dwtest(stepwise_model_med)
 
 # Multicollinearity - Variance Inflation Factor for multicollinearity
-vif(stepwise_model_bog)  # VIF > 5 or 10 might be problematic
+vif(stepwise_model_med)  # VIF > 5 or 10 might be problematic
 
 # Performance metrics
-mae <- mean(abs(test_data_bog$predicted_workers - test_data_bog$workers.geih))
-rmse <- sqrt(mean((test_data_bog$predicted_workers - test_data_bog$workers.geih)^2))
+mae <- mean(abs(test_data_med$predicted_workers - test_data_med$workers.geih))
+rmse <- sqrt(mean((test_data_med$predicted_workers - test_data_med$workers.geih)^2))
 
 # Print performance metrics
 cat("MAE:", mae, "\n")
@@ -522,20 +522,21 @@ cat("RMSE:", rmse, "\n")
 ```
 What do these results mean for our OLS model assumptions?
 *Normality Test (Shapiro-Wilk)*
-W = 0.93935, p-value = 0.07918: The p-value is greater than 0.05, suggesting that the residuals could be considered normally distributed, although it's on the edge.
+W = 0.95376, p-value = 0.198: With a p-value greater than the conventional alpha level of 0.05, we do not have sufficient evidence to reject the null hypothesis that the residuals are normally distributed. This result suggests that the normality assumption for the OLS residuals does not appear to be violated.
 *Homoscedasticity (Plot of Residuals vs. Fitted Values)*
-The residuals plot shows a random dispersion of points around the horizontal line at zero, which suggests that there might not be any obvious problems with homoscedasticity. However, the slight funnel shape might imply potential heteroscedasticity.
+The residuals appear to be relatively evenly scattered above and below the horizontal line at zero, which is a good sign that the assumption may not be violated.There's no clear pattern, such as a funnel shape, that would indicate an increase or decrease in the variance of residuals with fitted values.
+
 *Independence (Durbin-Watson test)*
-DW = 3.6227, p-value = 0.9992: The Durbin-Watson statistic is far from 2, indicating the presence of negative autocorrelation, which is not common in cross-sectional data.
+DW = 2.9107, p-value = 0.3479: The Durbin-Watson statistic is above 2, which could indicate negative autocorrelation, but because the p-value is well above 0.05, we do not have evidence of significant autocorrelation. This suggests that the independence assumption may not be violated in this model.
 *Multicollinearity (VIF)*
-Some of the VIF values are quite large (in the millions), indicating severe multicollinearity issues. 
+The VIF values for some variables are extremely high, indicating potential multicollinearity issues. When VIF values are in the hundreds or even larger, it signals that some independent variables are highly correlated with each other, which could be problematic because it can inflate the variance of the parameter estimates and may affect the stability of the model.
 *Prediction Performance (MAE and RMSE)*
-The MAE and RMSE are quite high, indicating that the model's predictions are on average off by a considerable margin.
+MAE: 342053.3 and RMSE: 429242.9: These metrics suggest that on average, the model’s predictions are off by a substantial margin from the actual values. Ideally, we would want both MAE and RMSE to be as low as possible. The high values here indicate that the model's predictive accuracy is limited
 
 Before changing to another model that can better handle the type of data we have, let's try to remove the variables that are not statistically significant to the model and predict again to see if there is in fact some change in our prediction. 
 
 ```{r}
-coef_summary <- summary(stepwise_model_bog)$coefficients
+coef_summary <- summary(stepwise_model_med)$coefficients
 
 # Extract names of statistically significant variables (p-value < 0.05)
 significant_vars <- rownames(coef_summary)[coef_summary[, "Pr(>|t|)"] < 0.05]
@@ -545,24 +546,27 @@ significant_vars <- rownames(coef_summary)[coef_summary[, "Pr(>|t|)"] < 0.05]
 significant_formula <- as.formula(paste("workers.geih ~", paste(significant_vars[significant_vars != "(Intercept)"], collapse = " + ")))
 
 # Fit the new model with significant variables only
-stepwise_model_bog_sig <- lm(significant_formula, data = train_data_bog)
+stepwise_model_med_sig <- lm(significant_formula, data = train_data_med)
 
 # Summary of the new model
-summary(stepwise_model_bog_sig)
-
+summary(stepwise_model_med_sig)
 ```
+
 ```{r}
 # Predicting with the stepwise model
-test_data_bog$predicted_workers_sig <- predict(stepwise_model_bog_sig, newdata = test_data_bog)
+test_data_med$predicted_workers_sig <- predict(stepwise_model_med_sig, newdata = test_data_med)
+
+# Find the full range of values for workers including both actual values and predictions
+full_range <- range(c(medellin_dataset_subset$workers.geih, mean(test_data_med$predicted_workers)))
 
 # Plot the actual data for the complete dataset
-plot(bogota_dataset_subset$date, bogota_dataset_subset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers')
+plot(medellin_dataset_subset$date, medellin_dataset_subset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', ylim=full_range)
 
 # Add the forecasted data starting from the prediction date
-lines(test_data_bog$date, test_data_bog$predicted_workers, col='red')
+lines(test_data_med$date, test_data_med$predicted_workers, col='red')
 
 # Add the forecasted data starting from the prediction date
-lines(test_data_bog$date, test_data_bog$predicted_workers_sig, col='gold')
+lines(test_data_med$date, test_data_med$predicted_workers_sig, col='gold')
 
 # Add a legend to the plot
 legend("topleft", legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", "OLS Prediction (2019-07 onward) Sig. Variables"),
@@ -570,43 +574,43 @@ legend("topleft", legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward
 
 
 # Ensure the plot has the correct limits
-xlim <- range(bogota_dataset_subset$date)
-ylim <- range(c(bogota_dataset_subset$workers.geih, test_data_bog$predicted_workers, test_data_bog$predicted_workers_sig))
+xlim <- range(medellin_dataset_subset$date)
+ylim <- range(c(medellin_dataset_subset$workers.geih, test_data_med$predicted_workers, test_data_med$predicted_workers_sig))
 
 ```
 
 
 ```{r}
 # Normality - Shapiro-Wilk normality test on model residuals
-shapiro.test(resid(stepwise_model_bog_sig))
+shapiro.test(resid(stepwise_model_med_sig))
 
 # Homoscedasticity - Plot residuals vs. fitted values
-plot(fitted(stepwise_model_bog_sig), resid(stepwise_model_bog_sig), xlab = "Fitted Values", ylab = "Residuals")
+plot(fitted(stepwise_model_med_sig), resid(stepwise_model_med_sig), xlab = "Fitted Values", ylab = "Residuals")
 abline(h = 0, col = "red")
 
 # Independence - Durbin-Watson test for autocorrelation
-dwtest(stepwise_model_bog_sig)
+dwtest(stepwise_model_med_sig)
 
 # Multicollinearity - Variance Inflation Factor for multicollinearity
-vif(stepwise_model_bog_sig)  # VIF > 5 or 10 might be problematic
+vif(stepwise_model_med_sig)  # VIF > 5 or 10 might be problematic
 
 # Performance metrics
-mae <- mean(abs(test_data_bog$predicted_workers - test_data_bog$workers.geih))
-rmse <- sqrt(mean((test_data_bog$predicted_workers - test_data_bog$workers.geih)^2))
+mae <- mean(abs(test_data_med$predicted_workers - test_data_med$workers.geih))
+rmse <- sqrt(mean((test_data_med$predicted_workers - test_data_med$workers.geih)^2))
 
 # Print performance metrics
 cat("MAE:", mae, "\n")
 cat("RMSE:", rmse, "\n")
 
 # Performance metrics significant variables
-mae_sig <- mean(abs(test_data_bog$predicted_workers_sig - test_data_bog$workers.geih))
-rmse_sig <- sqrt(mean((test_data_bog$predicted_workers_sig - test_data_bog$workers.geih)^2))
+mae_sig <- mean(abs(test_data_med$predicted_workers_sig - test_data_med$workers.geih))
+rmse_sig <- sqrt(mean((test_data_med$predicted_workers_sig - test_data_med$workers.geih)^2))
 
 # Print performance metrics significant variables
 cat("MAE significant variables:", mae_sig, "\n")
 cat("RMSE significant variables:", rmse_sig, "\n")
 ```
-Even though the MAE and RMSE Result show an improvement, we can visually see that the model is not effectively predicting our workers variable. We are goin to analyze another more robust prediction models that might capture better the behaviour of our variables and could produce more trustworthy predictions. In this case we are going to analyze ARIMA, SARIMA, and SARIMAX models. 
+The MAE and RMSE Result show an improvement, as we can visually see. We are going to analyze another more robust prediction models that might capture better the behavior of our variables and could produce more trustworthy predictions. In this case we are going to analyze ARIMA, SARIMA, and Random Forrest models. 
 
 Let's start with an ARIMA model, which stands for  *A*utoreg*r*essive *I*ntegrated *M*oving *A*verage. This is a class of satistical model used for analyzing and forecasting time series data. It has 3 main components:
 1) AR(Autoregressive) - p : Involves using the past values of the time series to predict the future values.
@@ -616,12 +620,12 @@ Let's start with an ARIMA model, which stands for  *A*utoreg*r*essive *I*ntegrat
 First we need to make sure that our target variable is stationary.
 ```{r}
 # Convert the workers data into a time series object, assuming monthly data frequency
-workers_ts <- ts(train_data_bog$workers.geih, frequency = 12)
+workers_ts <- ts(train_data_med$workers.geih, frequency = 12)
 
 # Perform the Augmented Dickey-Fuller test
 adf.test(workers_ts, alternative = "stationary")
 ```
-The Augmented Dickey-Fuller (ADF) test is used to test the null hypothesis that a unit root is present in a time series sample. A unit root would indicate that the time series is non-stationary, meaning its statistical properties change over time. In this case, since our p-value (0.3841) is greater than the alpha level of 0.05, we don't have enough evidence to reject the null hypothesis, which implies that the time series may be non-stationary. 
+The Augmented Dickey-Fuller (ADF) test is used to test the null hypothesis that a unit root is present in a time series sample. A unit root would indicate that the time series is non-stationary, meaning its statistical properties change over time. In this case, since our p-value (0.6976) is greater than the alpha level of 0.05, we don't have enough evidence to reject the null hypothesis, which implies that the time series may be non-stationary. 
 
 We need to apply differencing to our time series data to remove trends and stabilize its mean. Afterwards, we will check for stationarity again. 
 ```{r}
@@ -630,7 +634,10 @@ diff_workers_ts <- diff(workers_ts)
 
 # Retest for stationarity on the differenced data
 adf.test(diff_workers_ts, alternative = "stationary")
+```
+After differencing we can see that our p-value is just slightly above the threshold of 0.05, we can assume that it is stationary and proceed to predict our variable.  
 
+```{r}
 # ACF and PACF plots to help identify model parameters
 acf(diff_workers_ts)
 pacf(diff_workers_ts)
@@ -643,27 +650,29 @@ summary(arima_model)
 print("")
 summary(arima_model_d)
 ```
-After differencing we can see that our p-value is just slightly above the threshold of 0.05, we can assume that it is stationary and proceed to predict our variable.  
+*ACF*: The ACF plot shows the autocorrelation of the series with its lags. Ideally, for a time series that has no autocorrelation, we would expect to see the plot drop to near-zero quickly. In this case, after differencing once, the ACF plot shows that the first lag is significantly above the blue dashed confidence interval lines, but subsequent lags drop within the confidence bounds. This suggests that there is significant autocorrelation at lag 1, but not much beyond that.
+
+*PACF*: Here, we see that most PACF values are within the confidence bounds, suggesting that the AR terms might not be necessary, or if they are, they are likely to be of low order.
 
 ```{r}
 # Generate a sequence of dates for forecasting that aligns with the test set
 arima_forecast_dates <- seq(from = as.Date("2019-07-01"), 
                             by = "month", 
-                            length.out = length(test_data_bog$date))
+                            length.out = length(test_data_med$date))
 
 # Forecasting
-forecasts <- forecast(arima_model, h = length(test_data_bog$workers.geih))
-forecasts_d <- forecast(arima_model_d, h= length(test_data_bog$workers.geih))
+forecasts <- forecast(arima_model, h = length(test_data_med$workers.geih))
+forecasts_d <- forecast(arima_model_d, h= length(test_data_med$workers.geih))
 
 # Define the time series plot range
-time_range <- range(bogota_dataset_subset$date)
+time_range <- range(medellin_dataset_subset$date)
 
 # Define the y-axis plot range to include all data
-workers_range <- range(bogota_dataset_subset$workers.geih, test_data_bog$predicted_workers, test_data_bog$predicted_workers_sig, forecasts$lower[,2], forecasts$upper[,2])
+workers_range <- range(medellin_dataset_subset$workers.geih, quantile(test_data_med$predicted_workers,0.25), test_data_med$predicted_workers_sig, forecasts$lower[,2], forecasts$upper[,2])
 
 # Plot the actual data for the complete dataset
-plot(bogota_dataset_subset$date, bogota_dataset_subset$workers.geih, type='l', col='black', 
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BOGOTA D.C")
+plot(medellin_dataset_subset$date, medellin_dataset_subset$workers.geih, type='l', col='black', 
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in MEDELLIN A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue')
@@ -672,8 +681,8 @@ lines(arima_forecast_dates, forecasts$mean, col='blue')
 lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet')
 
 # OLS forecasted data
-lines(test_data_bog$date, test_data_bog$predicted_workers, col='red')
-lines(test_data_bog$date, test_data_bog$predicted_workers_sig, col='gold')
+lines(test_data_med$date, test_data_med$predicted_workers, col='red')
+lines(test_data_med$date, test_data_med$predicted_workers_sig, col='gold')
 
 # Legend with confidence intervals
 par(xpd=TRUE) # Allow things to be drawn outside the plot region
@@ -693,8 +702,8 @@ par(xpd=FALSE) # Turn off drawing outside plot region
 
 #Evaluate the predictive performance of the ARIMA Model against the observed data
 # Calculate MAE and RMSE
-mae_arima <- mean(abs(test_data_bog$workers.geih - forecasts$mean))
-rmse_arima <- sqrt(mean((test_data_bog$workers.geih - forecasts$mean)^2))
+mae_arima <- mean(abs(test_data_med$workers.geih - forecasts$mean))
+rmse_arima <- sqrt(mean((test_data_med$workers.geih - forecasts$mean)^2))
 
 # Print the results
 cat("ARIMA Model MAE:", mae_arima, "\n")
@@ -703,7 +712,7 @@ cat("ARIMA Model RMSE:", rmse_arima, "\n")
 # If you also want to include a summary of the forecast object
 summary(forecasts)
 ```
-We can visually confirm that the ARIMA model is predicting the variables better than the prior 2 models but the ARIMA model with the d argument manually set to 1 is just producing a straigh line. Let's proceed to store the evaluation results of each to be able to better compare them at the end.
+We can visually confirm that the ARIMA model is not predicting the variables better than one of the prior 2 models but the ARIMA models with the d argument manually set to 1 and the one determined by the auto.arima function are just producing a straight line. Let's proceed to store the evaluation results of each to be able to better compare them at the end.
 ```{r}
 # Initialize an empty data frame to store the model summary statistics
 model_summaries <- data.frame(
@@ -719,9 +728,9 @@ model_summaries <- data.frame(
   stringsAsFactors = FALSE
 )
 # Calculate metrics for OLS model
-ols_mae <- mean(abs(test_data_bog$predicted_workers - test_data_bog$workers.geih))
-ols_rmse <- sqrt(mean((test_data_bog$predicted_workers - test_data_bog$workers.geih)^2))
-ols_summary <- summary(stepwise_model_bog)
+ols_mae <- mean(abs(test_data_med$predicted_workers - test_data_med$workers.geih))
+ols_rmse <- sqrt(mean((test_data_med$predicted_workers - test_data_med$workers.geih)^2))
+ols_summary <- summary(stepwise_model_med)
 
 # Add OLS model metrics to the data frame
 model_summaries <- rbind(model_summaries, data.frame(
@@ -729,17 +738,17 @@ model_summaries <- rbind(model_summaries, data.frame(
   MAE = ols_mae,
   RMSE = ols_rmse,
   R_Squared = ols_summary$r.squared,
-  P_Value = 2.995e-06, # Manually get it
+  P_Value = 3.807e-05, # Manually get it
   Residual_SE = ols_summary$sigma,
-  AIC = AIC(stepwise_model_bog),
-  AICc = AIC(stepwise_model_bog) + (2 * length(coef(stepwise_model_bog)) * (length(coef(stepwise_model_bog)) + 1)) / (length(resid(stepwise_model_bog)) - length(coef(stepwise_model_bog)) - 1),
-  BIC = BIC(stepwise_model_bog)
+  AIC = AIC(stepwise_model_med),
+  AICc = AIC(stepwise_model_med) + (2 * length(coef(stepwise_model_med)) * (length(coef(stepwise_model_med)) + 1)) / (length(resid(stepwise_model_med)) - length(coef(stepwise_model_med)) - 1),
+  BIC = BIC(stepwise_model_med)
 ))
 
 # Calculate metrics for the OLS model with significant variables
-sig_ols_mae <- mean(abs(test_data_bog$predicted_workers_sig - test_data_bog$workers.geih))
-sig_ols_rmse <- sqrt(mean((test_data_bog$predicted_workers_sig - test_data_bog$workers.geih)^2))
-sig_ols_summary <- summary(stepwise_model_bog_sig)
+sig_ols_mae <- mean(abs(test_data_med$predicted_workers_sig - test_data_med$workers.geih))
+sig_ols_rmse <- sqrt(mean((test_data_med$predicted_workers_sig - test_data_med$workers.geih)^2))
+sig_ols_summary <- summary(stepwise_model_med_sig)
 
 # Add OLS model with significant variables metrics to the data frame
 model_summaries <- rbind(model_summaries, data.frame(
@@ -747,16 +756,16 @@ model_summaries <- rbind(model_summaries, data.frame(
   MAE = sig_ols_mae,
   RMSE = sig_ols_rmse,
   R_Squared = sig_ols_summary$r.squared,
-  P_Value = 1.229e-05, # Manually get it
+  P_Value = 0.0008965, # Manually get it
   Residual_SE = sig_ols_summary$sigma,
-  AIC = AIC(stepwise_model_bog_sig),
-  AICc = AIC(stepwise_model_bog_sig) + (2 * length(coef(stepwise_model_bog_sig)) * (length(coef(stepwise_model_bog_sig)) + 1)) / (length(resid(stepwise_model_bog_sig)) - length(coef(stepwise_model_bog_sig)) - 1),
-  BIC = BIC(stepwise_model_bog_sig)
+  AIC = AIC(stepwise_model_med_sig),
+  AICc = AIC(stepwise_model_med_sig) + (2 * length(coef(stepwise_model_med_sig)) * (length(coef(stepwise_model_med_sig)) + 1)) / (length(resid(stepwise_model_med_sig)) - length(coef(stepwise_model_med_sig)) - 1),
+  BIC = BIC(stepwise_model_med_sig)
 ))
 
 # Calculate metrics for ARIMA model
-arima_mae <- mean(abs(test_data_bog$workers.geih - forecasts$mean))
-arima_rmse <- sqrt(mean((test_data_bog$workers.geih - forecasts$mean)^2))
+arima_mae <- mean(abs(test_data_med$workers.geih - forecasts$mean))
+arima_rmse <- sqrt(mean((test_data_med$workers.geih - forecasts$mean)^2))
 arima_summary <- summary(arima_model)
 
 # Add ARIMA model metrics to the data frame
@@ -773,8 +782,8 @@ model_summaries <- rbind(model_summaries, data.frame(
 ))
 
 # Calculate metrics for ARIMA model
-arima_d_mae <- mean(abs(test_data_bog$workers.geih - forecasts_d$mean))
-arima_d_rmse <- sqrt(mean((test_data_bog$workers.geih - forecasts_d$mean)^2))
+arima_d_mae <- mean(abs(test_data_med$workers.geih - forecasts_d$mean))
+arima_d_rmse <- sqrt(mean((test_data_med$workers.geih - forecasts_d$mean)^2))
 arima_d_summary <- summary(arima_model_d)
 
 # Add ARIMA model metrics to the data frame
@@ -794,11 +803,11 @@ model_summaries <- rbind(model_summaries, data.frame(
 print(model_summaries)
 
 ```
-As we can see, the ARIMA models have somewhat of a better performance than the previous models, but they are still not the most optimal ones. Let's see how the residuals of our auto ARIMA prediction, as well as our ACF and PACF plots look like in order to determine our next steps.
+As we can see, the OLS model has a better performance than the other models, but it might not be still the most optimal one. Let's see how the residuals of our auto ARIMA prediction, as well as our ACF and PACF plots look like in order to determine our next steps.
 
 ```{r Residual and ACF / PACF Analysis of ARIMA}
 # Calculate residuals
-residuals <- test_data_bog$workers.geih - forecasts$mean
+residuals <- test_data_med$workers.geih - forecasts$mean
 
 # Calculate Mean Squared Error (MSE)
 mse <- mean(residuals^2)
@@ -823,9 +832,9 @@ pacf(residuals_arima, main='PACF of ARIMA Residuals')
 
 ```
 Here is what we can conclude from each of the previous plots, and what they are evaluating:
-*Residuals*: Use to visually assess the randomness and distribution of the residuals in our prediction. We should expect the residuals to have no clear pattern, be white noise, which is not the case for our ARIMA model. From this we can start thinking on implementing a model that might better recognize any seasonal patters. 
-*ACF*: Used to show the correlation of the time series with its own lagged values. Values are expected to stay within the confidence interval represented by the blue limits, which is mostly the case for our model.  This suggests that there is little to no autocorrelation in the residuals of the model at various lags, indicating that the model is capturing the structure of the time series well.
-*PACF*: Used for identifying the number of AR (Autoregressive) terms. Since there are no significant spikes and everything is within the confidence interval, it suggests that the current model is adequately capturing the AR structure of the data.
+*Residuals*: Use to visually assess the randomness and distribution of the residuals in our prediction. The plot of the residuals of the ARIMA model appears to exhibit some pattern, as indicated by  a distinct upward pattern, suggesting that some trend or seasonality is not being captured by the ARIMA model.
+*ACF*: Used to show the correlation of the time series with its own lagged values.  It shows that most of the autocorrelations for various lags are within the blue confidence limits, which suggests that there is little autocorrelation remaining in the residuals. However, there is some remaining autocorrelation in the residuals that the ARIMA model has not accounted for, indicating potential room for model improvement.
+*PACF*: Used for identifying the number of AR (Autoregressive) terms. There is the presence of a few significant spikes that might suggest that exploring the inclusion of more AR terms could potentially enhance the model's fit to the data.
 
 These results are promising. Let's continue now with a SARIMA model, in order to better capture the seasonal component of our data.
 
@@ -837,50 +846,36 @@ sarima_model <- auto.arima(workers_ts, seasonal = TRUE)
 summary(sarima_model)
 
 # Forecasting with SARIMA model
-sarima_forecasts <- forecast(sarima_model, h = length(test_data_bog$workers.geih))
+sarima_forecasts <- forecast(sarima_model, h = length(test_data_med$workers.geih))
 ```
 Let's visualize this result with our other models to see how it is behaving. 
 ```{r visualizing models with confidence intervals}
 # Plot the actual data for the complete dataset
 all_confidence_intervals <- c(forecasts$lower[,2], forecasts$upper[,2], 
                               sarima_forecasts$lower[,2], sarima_forecasts$upper[,2])
-workers_range <- range(bogota_dataset_subset$workers.geih, 
-                       test_data_bog$predicted_workers, 
-                       test_data_bog$predicted_workers_sig, 
+
+workers_range <- range(medellin_dataset_subset$workers.geih, 
+                       test_data_med$predicted_workers, 
+                       test_data_med$predicted_workers_sig, 
                        all_confidence_intervals)
 
-plot(bogota_dataset_subset$date, bogota_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+plot(medellin_dataset_subset$date, medellin_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
      xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, 
-     main="Forecasts Comparison for Employed Workers in BOGOTA D.C")
-
-# ARIMA forecast intervals
-polygon(c(arima_forecast_dates, rev(arima_forecast_dates)), 
-        c(forecasts$lower[,1], rev(forecasts$upper[,1])), 
-        col=rgb(0.8, 0.8, 0.8, alpha=0.5), border=NA) # 80% confidence 
-polygon(c(arima_forecast_dates, rev(arima_forecast_dates)), 
-        c(forecasts$lower[,2], rev(forecasts$upper[,2])), 
-        col=rgb(0.3, 0.3, 0.3, alpha=0.2), border=NA) # 95% confidence 
+     main="Forecasts Comparison for Employed Workers in MEDELLIN A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
 
 # SARIMA forecast line
-sarima_forecast_dates <- seq(from = min(test_data_bog$date), 
+sarima_forecast_dates <- seq(from = min(test_data_med$date), 
                              by = "month", 
                              length.out = length(sarima_forecasts$mean))
+
 lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
 
 # OLS forecasted data
-lines(test_data_bog$date, test_data_bog$predicted_workers, col='red', lwd=1.8)
-lines(test_data_bog$date, test_data_bog$predicted_workers_sig, col='gold', lwd=1.8)
-
-# Add SARIMA forecast intervals
-polygon(c(sarima_forecast_dates, rev(sarima_forecast_dates)), 
-        c(sarima_forecasts$lower[,1], rev(sarima_forecasts$upper[,1])), 
-        col=rgb(0.8, 0.8, 0.8, alpha=0.5), border=NA) # 80% confidence 
-polygon(c(sarima_forecast_dates, rev(sarima_forecast_dates)), 
-        c(sarima_forecasts$lower[,2], rev(sarima_forecasts$upper[,2])), 
-        col=rgb(0.3, 0.3, 0.3, alpha=0.2), border=NA) # 95% confidence 
+lines(test_data_med$date, test_data_med$predicted_workers, col='red', lwd=1.8)
+lines(test_data_med$date, test_data_med$predicted_workers_sig, col='gold', lwd=1.8)
 
 # Update the legend with SARIMA
 legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
@@ -900,8 +895,8 @@ par(xpd=FALSE) # Turn off drawing outside plot region
 
 ```{r visualizing models}
 # Plot the actual data for the complete dataset
-plot(bogota_dataset_subset$date, bogota_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BOGOTA D.C")
+plot(medellin_dataset_subset$date, medellin_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in MEDELLIN A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
@@ -910,17 +905,17 @@ lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
 lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
 
 # SARIMA forecast line
-sarima_forecast_dates <- seq(from = min(test_data_bog$date), 
+sarima_forecast_dates <- seq(from = min(test_data_med$date), 
                              by = "month", 
                              length.out = length(sarima_forecasts$mean))
 lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
 
 # OLS forecasted data
-lines(test_data_bog$date, test_data_bog$predicted_workers, col='red', lwd=1.8)
-lines(test_data_bog$date, test_data_bog$predicted_workers_sig, col='gold', lwd=1.8)
+lines(test_data_med$date, test_data_med$predicted_workers, col='red', lwd=1.8)
+lines(test_data_med$date, test_data_med$predicted_workers_sig, col='gold', lwd=1.8)
 
 # Add a vertical line for the last day of the training data
-abline(v = as.numeric(min(test_data_bog$date)), col="black", lwd=1.8, lty=2)
+abline(v = as.numeric(min(test_data_med$date)), col="black", lwd=1.8, lty=2)
 
 # Update the legend with SARIMA
 legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
@@ -935,13 +930,14 @@ legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
        fill=c("black", "red", "gold", "blue", "darkviolet","green"),
        bty="n") 
 par(xpd=TRUE) # Turn off drawing outside plot region
+
 ```
 Let's add the results of the SARIMA Model to our results dataset to be able to compare it with the other models we have so far.
 
 ```{r}
 # Calculate metrics for SARIMA model
-sarima_mae <- mean(abs(test_data_bog$workers.geih - sarima_forecasts$mean))
-sarima_rmse <- sqrt(mean((test_data_bog$workers.geih - sarima_forecasts$mean)^2))
+sarima_mae <- mean(abs(test_data_med$workers.geih - sarima_forecasts$mean))
+sarima_rmse <- sqrt(mean((test_data_med$workers.geih - sarima_forecasts$mean)^2))
 sarima_summary <- summary(sarima_model)
 
 # Add SARIMA model metrics to the data frame
@@ -960,10 +956,10 @@ model_summaries <- rbind(model_summaries, data.frame(
 # Print the model summaries data frame
 print(model_summaries)
 ```
-The SARIMA model definitely show an improvement against the rest of the models chosen for this analysis. Let's see if we can obtain better results fitting a Random Forrest Model to see if it can outperform the models we have so far.
+The SARIMA model gave the same results as the initial ARIMA prediction. Let's see if we can obtain better results fitting a Random Forrest Model to see if it can outperform the models we have so far.
 ```{r Random forrest}
 # Load data
-data_rf <- bogota_dataset_subset
+data_rf <- medellin_dataset_subset
 
 # Ensure date is in the correct format
 data_rf$date <- as.Date(data_rf$date)
@@ -1023,9 +1019,12 @@ barplot(importance, main="Feature Importance in Random Forest Model", horiz=TRUE
 ```
 
 ```{r visualizing model results}
+# Find the full range of values for workers including both actual values and predictions
+full_range <- range(c(medellin_dataset_subset$workers.geih, 1500000))
+
 # Plot the actual data for the complete dataset
-plot(bogota_dataset_subset$date, bogota_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BOGOTA D.C")
+plot(medellin_dataset_subset$date, medellin_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=full_range,  main="Forecasts Comparison for Employed Workers in MEDELLIN A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
@@ -1034,20 +1033,20 @@ lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
 lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
 
 # SARIMA forecast line
-sarima_forecast_dates <- seq(from = min(test_data_bog$date), 
+sarima_forecast_dates <- seq(from = min(test_data_med$date), 
                              by = "month", 
                              length.out = length(sarima_forecasts$mean))
 lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
 
 # OLS forecasted data
-lines(test_data_bog$date, test_data_bog$predicted_workers, col='red', lwd=1.8)
-lines(test_data_bog$date, test_data_bog$predicted_workers_sig, col='gold', lwd=1.8)
+lines(test_data_med$date, test_data_med$predicted_workers, col='red', lwd=1.8)
+lines(test_data_med$date, test_data_med$predicted_workers_sig, col='gold', lwd=1.8)
 
 # Random Forest model predictions
 lines(test_dates, predictions_rf, col='orange', lwd=1.8)
 
 # Add a vertical line for the last day of the training data
-abline(v = as.numeric(min(test_data_bog$date)), col="black", lwd=1.8, lty=2)
+abline(v = as.numeric(min(test_data_med$date)), col="black", lwd=1.8, lty=2)
 
 # Update the legend with Random Forest
 legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
@@ -1207,9 +1206,12 @@ print(paste("Best R-squared Model - MAE:", MAE_rsquared, "RMSE:", RMSE_rsquared,
 ```
 
 ```{r}
+# Find the full range of values for workers including both actual values and predictions
+full_range <- range(c(medellin_dataset_subset$workers.geih, 1500000))
+
 # Plot the actual data for the complete dataset
-plot(bogota_dataset_subset$date, bogota_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BOGOTA D.C")
+plot(medellin_dataset_subset$date, medellin_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=full_range, main="Forecasts Comparison for Employed Workers in MEDELLIN A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
@@ -1218,14 +1220,14 @@ lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
 lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
 
 # SARIMA forecast line
-sarima_forecast_dates <- seq(from = min(test_data_bog$date), 
+sarima_forecast_dates <- seq(from = min(test_data_med$date), 
                              by = "month", 
                              length.out = length(sarima_forecasts$mean))
 lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
 
 # OLS forecasted data
-lines(test_data_bog$date, test_data_bog$predicted_workers, col='red', lwd=1.8)
-lines(test_data_bog$date, test_data_bog$predicted_workers_sig, col='gold', lwd=1.8)
+lines(test_data_med$date, test_data_med$predicted_workers, col='red', lwd=1.8)
+lines(test_data_med$date, test_data_med$predicted_workers_sig, col='gold', lwd=1.8)
 
 # Random Forest model predictions optimized for RMSE
 lines(test_dates, predictions_rmse, col='orange', lwd=1.8, lty=2)
@@ -1234,7 +1236,7 @@ lines(test_dates, predictions_rmse, col='orange', lwd=1.8, lty=2)
 lines(test_dates, predictions_rsquared, col='cyan', lwd=1.8, lty=2)
 
 # Add a vertical line for the last day of the training data
-abline(v = as.numeric(min(test_data_bog$date)), col="black", lwd=1.8, lty=2)
+abline(v = as.numeric(min(test_data_med$date)), col="black", lwd=1.8, lty=2)
 
 # Update the legend with Random Forest predictions
 legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
@@ -1253,10 +1255,10 @@ par(xpd=TRUE) # Allow drawing outside plot region
 
 ```{r}
 # Remove by model name
-model_summaries <- model_summaries[!(model_summaries$Model == "Tuned Random Forest"), ]
+model_summaries <- model_summaries[!(model_summaries$Model == "SARIMA"), ]
 model_summaries
-
 ```
+
 ```{r}
 # Get the names of features used in the model (excluding the response variable)
 feature_names <- setdiff(colnames(train_data_rf), "workers.geih")
@@ -1269,26 +1271,9 @@ if(length(feature_names) == nrow(importance)) {
   warning("Mismatch in number of features and importance scores.")
 }
 
-
-```
-```{r}
-# Ensure feature names are available
-feature_names <- colnames(train_data_rf[-which(colnames(train_data_rf) == "workers.geih")])
-
-# Check if the feature importance can be matched to feature names
-if(length(feature_names) == ncol(importance)) {
-  barplot(importance, names.arg = feature_names, main="Feature Importance in Random Forest Model", las=2)
-} else {
-  warning("Mismatch in number of features and importance scores.")
-}
-
 ```
 
-
-
 ```{r}
-# Assuming the models have been fit as described in your extensive script
-
 # Helper function to extract variables from a linear model
 extract_lm_vars <- function(model) {
   return(names(coef(model)))
@@ -1303,8 +1288,8 @@ extract_rf_vars <- function(model) {
 model_var_summary <- list()
 
 # For OLS models
-model_var_summary$OLS <- extract_lm_vars(bog_basic_ols)
-model_var_summary$OLS_Significant <- extract_lm_vars(stepwise_model_bog_sig)
+model_var_summary$OLS <- extract_lm_vars(med_basic_ols)
+model_var_summary$OLS_Significant <- extract_lm_vars(stepwise_model_med_sig)
 
 # For Random Forest
 
