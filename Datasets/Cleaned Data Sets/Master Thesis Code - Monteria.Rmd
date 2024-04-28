@@ -1028,7 +1028,7 @@ barplot(importance, main="Feature Importance in Random Forest Model", horiz=TRUE
 
 ```{r visualizing model results}
 # Find the full range of values for workers including both actual values and predictions
-#full_range <- range(c(monteria_dataset_subset$workers.geih, 1500000))
+full_range <- range(c(monteria_dataset_subset$workers.geih))
 
 # Plot the actual data for the complete dataset
 plot(monteria_dataset_subset$date, monteria_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
@@ -1144,7 +1144,8 @@ rf_model_rmse <- train(
   method = "ranger", 
   trControl = control,
   tuneLength = 10,
-  metric = "RMSE"
+  metric = "RMSE",
+  importance = 'impurity' # This tells ranger to calculate variable importance
 )
 
 # Train the Random Forest model focusing on R-squared
@@ -1154,7 +1155,8 @@ rf_model_rsquared <- train(
   method = "ranger", 
   trControl = control,
   tuneLength = 10,
-  metric = "Rsquared"
+  metric = "Rsquared",
+  importance = 'impurity' # This tells ranger to calculate variable importance
 )
 
 # Predict on the test set for both models
@@ -1264,11 +1266,6 @@ legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
 par(xpd=TRUE) # Allow drawing outside plot region
 ```
 
-```{r}
-# Remove by model name
-model_summaries <- model_summaries[!(model_summaries$Model == "SARIMA"), ]
-model_summaries
-```
 
 ```{r}
 # Get the names of features used in the model (excluding the response variable)
@@ -1299,7 +1296,7 @@ extract_rf_vars <- function(model) {
 model_var_summary <- list()
 
 # For OLS models
-model_var_summary$OLS <- extract_lm_vars(model_mon)
+model_var_summary$OLS <- extract_lm_vars(stepwise_model_mon)
 model_var_summary$OLS_Significant <- extract_lm_vars(stepwise_model_mon_sig)
 
 # For Random Forest
@@ -1326,6 +1323,176 @@ model_vars_df <- data.frame(
 print(model_vars_df)
 
 ```
+```{r importance for RF Model}
+# Convert the matrix to a data frame
+importance_df <- as.data.frame(importance)
 
+# Add the feature names as a new column from the row names
+importance_df$Feature <- rownames(importance_df)
+
+# Sort the data frame by importance
+importance_df <- importance_df[order(-importance_df$IncNodePurity), ]
+
+# Select the top N features for clarity
+top_n <- 10
+importance_top_n <- head(importance_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_top_n$IncNodePurity, 
+        main="Feature Importance in Random Forest Model",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_top_n$Feature, xpd = TRUE, cex = 0.75)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+```{r Get RF Models}
+# Extract the ranger model from the caret train object
+ranger_model_rf <- rf_model$finalModel
+ranger_model_rmse <- rf_model_rmse$finalModel
+ranger_model_rsquared <- rf_model_rsquared$finalModel
+
+# Now you can calculate variable importance directly from the ranger model
+importance_rf <- ranger_model_rf$variable.importance
+importance_rmse <- ranger_model_rmse$variable.importance
+importance_rsquared <- ranger_model_rsquared$variable.importance
+
+# The importance is returned as a named vector, you can sort it to see the most important variables
+sorted_importance_rf <- sort(importance_rf, decreasing = TRUE)
+sorted_importance_rmse <- sort(importance_rmse, decreasing = TRUE)
+sorted_importance_rsquared <- sort(importance_rsquared, decreasing = TRUE)
+
+# To view the importance
+print(sorted_importance_rf)
+print("")
+print(sorted_importance_rmse)
+print("")
+print(sorted_importance_rsquared)
+
+```
+
+```{r rf RMSE x}
+# Convert the matrix to a data frame
+importance_r2_df <- as.data.frame(sorted_importance_rmse)
+
+# Add the feature names as a new column from the row names
+importance_r2_df$Feature <- rownames(importance_r2_df)
+
+# Select the top N features for clarity
+top_n <- 10
+importance_r2_top_n <- head(importance_r2_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_r2_top_n$sorted_importance_rmse, 
+        main="Feature Importance in Random Forest Model focused on RMSE",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_r2_top_n$Feature, xpd = TRUE, cex = 0.75)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+
+```{r rf Rsquared x}
+# Convert the matrix to a data frame
+importance_r3_df <- as.data.frame(sorted_importance_rsquared)
+
+# Add the feature names as a new column from the row names
+importance_r3_df$Feature <- rownames(importance_r3_df)
+
+# Select the top N features for clarity
+top_n <- 10
+importance_r3_top_n <- head(importance_r3_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_r3_top_n$sorted_importance_rsquared, 
+        main="Feature Importance in Random Forest Model focused on R squared",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_r3_top_n$Feature, xpd = TRUE, cex = 0.5)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+
+```{r export result summaries}
+# Assuming 'df' is your dataframe
+write_xlsx(model_summaries, path = "monteria_results.xlsx")
+
+```
+
+
+```{r export plot}
+# Open a PNG graphics device
+png("monteria_results.png", width=600, height=500)  # Adjust 'width' and 'height' as needed
+
+# Find the full range of values for workers including both actual values and predictions
+full_range <- range(c(monteria_dataset_subset$workers.geih, 165000))
+
+# Plot the actual data for the complete dataset
+plot(monteria_dataset_subset$date, monteria_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=full_range, main="Forecasts Comparison for Employed Workers in MANIZALES")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
+
+# ARIMA d=1 forecast line
+lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
+
+# SARIMA forecast line
+sarima_forecast_dates <- seq(from = min(test_data_mon$date), 
+                             by = "month", 
+                             length.out = length(sarima_forecasts$mean))
+lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
+
+# OLS forecasted data
+lines(test_data_mon$date, test_data_mon$predicted_workers, col='red', lwd=1.8)
+lines(test_data_mon$date, test_data_mon$predicted_workers_sig, col='gold', lwd=1.8)
+
+# Random Forest model predictions
+lines(test_dates, predictions_rf, col='darkgreen', lwd=1.8)
+
+# Random Forest model predictions optimized for RMSE
+lines(test_dates, predictions_rmse, col='orange', lwd=1.8, lty=2)
+
+# Random Forest model predictions optimized for R-squared
+lines(test_dates, predictions_rsquared, col='cyan', lwd=1.8, lty=2)
+
+# Add a vertical line for the last day of the training data
+abline(v = as.numeric(min(test_data_mon$date)), col="black", lwd=1.8, lty=2)
+
+# Update the legend with Random Forest predictions
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=2 Forecast", 
+                "SARIMA Forecast","RF Prediction", "RF Prediction (Best RMSE)", "RF Prediction (Best R-squared)"), 
+       col=c("black", "red", "gold", "blue", "darkviolet", "green", "darkgreen","orange", "cyan"), 
+       lty=c(1, 1, 1, 1, 1, 1, 1, 2, 2), 
+       lwd=c(2, 2, 2, 2, 2, 2, 2, 2, 2), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue", "darkviolet", "green", "darkgreen","orange", "cyan"),
+       bty="n") 
+par(xpd=TRUE) # Allow drawing outside plot region
+
+# Close the graphics device
+dev.off()
+```
 
 

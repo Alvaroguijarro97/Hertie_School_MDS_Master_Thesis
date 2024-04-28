@@ -1,0 +1,372 @@
+---
+title: "Master Thesis Code"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries, include=Fase}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+library(gridExtra)
+library(cowplot)
+
+```
+
+Initially, lets obtain our different variables. 
+```{r read datasets}
+GEIH <- read_excel("GEIH_cleaned_2015-03-2023-12.xlsx")
+Population <- read_excel("Population_cleaned_2010-12-2023-12.xlsx")
+```
+
+Let's observe the first rows of each dataset. 
+```{r proof they have the necessary information}
+head(GEIH)
+head(Population)
+```
+Let's look more into each dataset datatype and summary
+```{r}
+skim(GEIH)
+skim(Population)
+```
+There are no missing variables in our datasets. They have different scales and sizing, which we should keep in mind for our future analysis. 
+
+Now, let's make sure all of the columns are in the same format in order to perform the join into a main dataframe. 
+```{r}
+GEIH$date <- format(as.Date(GEIH$date), "%Y-%m")
+GEIH$city <- as.character(GEIH$city)
+
+Population$date <- format(as.Date(Population$date), "%Y-%m")
+Population$city <- as.character(Population$city)
+
+
+summary(GEIH)
+summary(Population)
+```
+Let's filter our GEIH data so we only have the 13 cities we will look into out analysis. The scope of this Master Thesis will only include the 13 biggest cities in Colombia as of the time of writing. 
+
+```{r}
+print("Initial GEIH unique cities")
+unique(GEIH$city)
+print("Initial Population unique cities")
+unique(Population$city)
+GEIH_c <- GEIH %>%
+  filter(city  %in% c("BARRANQUILLA A.M.","BOGOTÁ D.C.","BUCARAMANGA A.M.","CALI  A.M.","CARTAGENA","CÚCUTA A.M.","IBAGUÉ","MANIZALES A.M.","MEDELLÍN A.M.","MONTERÍA","PASTO","PEREIRA A.M.","VILLAVICENCIO"))
+
+print("Cities of interest for the GEIH")
+unique(GEIH_c$city)
+```
+
+Let's add a tag to each variable to identify from which dataset they came from
+```{r}
+# Function to rename columns with a suffix, excluding specified columns
+rename_with_suffix <- function(df, suffix, exclude = c()) {
+  df %>% rename_with(~paste0(., suffix), -all_of(exclude))
+}
+
+GEIH_c <- rename_with_suffix(GEIH_c, ".geih", exclude = c("city", "date"))
+Population <- rename_with_suffix(Population, ".pop", exclude = c("city", "date"))
+```
+
+Let's identify what time frames are we working for on each dataset? 
+```{r}
+# Function to get the date range of a dataset
+get_date_range <- function(df, date_column) {
+  range(df[[date_column]], na.rm = TRUE)
+}
+
+# Applying the function to each dataset and printing the date ranges
+GEIH_date_range <- get_date_range(GEIH_c, "date")
+Population_date_range <- get_date_range(Population, "date")
+
+# Print the date ranges
+print(paste("GEIH_c date range:", GEIH_date_range[1], "/", GEIH_date_range[2]))
+print(paste("Population date range:", Population_date_range[1], "/", Population_date_range[2]))
+
+```
+
+```{r}
+# Perform left joins to combine datasets based on 'city' and 'date'
+df_analysis <- GEIH_c %>%
+  left_join(Population, by = c("city", "date"), suffix = c("", ".pop")) %>%
+  filter(date >= "2015-03" , date <= "2023-12")
+
+unique(df_analysis$city)
+unique(df_analysis$date)
+
+skim(df_analysis)
+summary(df_analysis)
+head(df_analysis)
+dim(df_analysis)
+```
+Now we have a dataset that contains the information from 2016-12 until 2019-12 for 13 Colombian cities and span between 16 economic sectors. We will proceed to work only with the total employed population in this cities for this Master Thesis. Let's rename and filter our dataset to only include that information. 
+
+```{r}
+unique(df_analysis$Concepto.geih)
+
+# List of unique worker types in the Concepto.geih column
+worker_types <- unique(df_analysis$Concepto.geih)
+df_analysis$Concepto.geih <- as.character(df_analysis$Concepto.geih)
+economic_activities <- c(
+  "Ocupados" = "Employed",
+  "No informa" = "Not Reported",
+  "Agricultura, ganadería, caza, silvicultura y pesca" = "Agriculture, Livestock, Hunting, Forestry, and Fishing",
+  "Explotación de minas y canteras" = "Mining and Quarrying",
+  "Industrias manufactureras" = "Manufacturing Industries",
+  "Suministro de electricidad gas, agua y gestión de desechos" = "Electricity, Gas, Water Supply, and Waste Management",
+  "Construcción" = "Construction",
+  "Comercio y reparación de vehículos" = "Commerce and Vehicle Repair",
+  "Alojamiento y servicios de comida" = "Accommodation and Food Services",
+  "Transporte y almacenamiento" = "Transportation and Storage",
+  "Información y comunicaciones" = "Information and Communications",
+  "Actividades financieras y de seguros" = "Financial and Insurance Activities",
+  "Actividades inmobiliarias" = "Real Estate Activities",
+  "Actividades profesionales, científicas, técnicas y servicios administrativos" = "Professional, Scientific, Technical Activities, and Administrative Services",
+  "Administración pública y defensa, educación y atención de la salud humana" = "Public Administration and Defense, Education, and Human Health Care", 
+  "Actividades artísticas, entretenimiento recreación y otras actividades de servicios" = "Artistic Activities, Entertainment, Recreation, and Other Service Activities")
+
+df_analysis_eng <- df_analysis %>%
+  mutate(
+    Concepto.geih = case_when(
+      Concepto.geih == "Ocupados" ~ "Employed",
+      Concepto.geih == "No informa" ~ "Not Reported",
+      Concepto.geih == "Agricultura, ganadería, caza, silvicultura y pesca" ~ "Agriculture, Livestock, Hunting, Forestry, and Fishing",
+      Concepto.geih == "Explotación de minas y canteras" ~ "Mining and Quarrying",
+      Concepto.geih == "Industrias manufactureras" ~ "Manufacturing Industries",
+      Concepto.geih == "Suministro de electricidad gas, agua y gestión de desechos" ~ "Electricity, Gas, Water Supply, and Waste Management",
+      Concepto.geih == "Construcción" ~ "Construction",
+      Concepto.geih == "Comercio y reparación de vehículos" ~ "Commerce and Vehicle Repair",
+      Concepto.geih == "Alojamiento y servicios de comida" ~ "Accommodation and Food Services",
+      Concepto.geih == "Transporte y almacenamiento" ~ "Transportation and Storage",
+      Concepto.geih == "Información y comunicaciones" ~ "Information and Communications",
+      Concepto.geih == "Actividades financieras y de seguros" ~ "Financial and Insurance Activities",
+      Concepto.geih == "Actividades inmobiliarias" ~ "Real Estate Activities",
+      Concepto.geih == "Actividades profesionales, científicas, técnicas y servicios administrativos" ~ "Professional, Scientific, Technical Activities, and Administrative Services",
+      Concepto.geih == "Administración pública y defensa, educación y atención de la salud humana" ~ "Public Administration and Defense, Education, and Human Health Care",
+      Concepto.geih == "Actividades artísticas, entretenimiento recreación y otras actividades de servicios" ~ "Artistic Activities, Entertainment, Recreation, and Other Service Activities",
+      TRUE ~ Concepto.geih  # Default case to handle any other unmentioned values
+    )
+  )
+
+
+str(df_analysis_eng)
+colnames(df_analysis_eng)
+```
+
+From the joins we have some repeated variables. Let's only select the columns that are of our interest:
+```{r}
+df_analysis_selected <- df_analysis_eng %>% 
+  rename( "eco_activity" = "Concepto.geih", 
+          "year" = "year.pop",
+          "month" = "month.pop")
+str(df_analysis_selected)
+```
+
+Let's now subset our data only on the employed workers as stated before (where "eco_activity" = Employed)
+
+```{r}
+df_analysis_selected$month <- as.numeric(df_analysis_selected$month)
+employed_data <- df_analysis_selected %>% 
+  filter(eco_activity == "Employed") 
+```
+
+What does our worker population looks like for each of the cities we are interested in? 
+```{r}
+# 1. Trend Analysis by City
+plotly_obj <- plot_ly(data = employed_data, x = ~date, y = ~workers.geih, 
+                      color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+                      type = 'scatter', mode = 'lines+markers',
+                      text = ~city, hoverinfo = 'text+x+y') %>%
+  layout(title = "Total Number of Workers Over Time by City from 2016 to 2019",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Number of Workers"), 
+         legend = list(orientation = "v", x = 1.05, y = 1))
+
+# Display the interactive plot
+plotly_obj
+```
+
+```{r}
+df <-employed_data %>%
+  select(city, date, population_month.pop, workers.geih)
+```
+
+```{r}
+# Convert date to Date format if it's not already
+df$date <- as.Date(paste0(df$date, "-01"), format = "%Y-%m-%d")
+
+# Unique cities, assuming you have 13 cities
+cities <- unique(df$city)
+
+# Prepare plotting space if you want to view all in one window (optional)
+par(mfrow = c(5, 3))
+
+# Create an empty list to store plots
+plots <- list()
+
+# Loop through each city and create a plot
+for (city in cities) {
+  # Filter and summarize data for the current city
+  city_data <- df %>%
+    filter(city == !!city) %>%
+    group_by(date) 
+
+  # Create the plot
+  p <- ggplot(city_data, aes(x = date)) +
+    geom_line(aes(y = population_month.pop, colour = "Population")) +
+    geom_line(aes(y = workers.geih, colour = "Workers")) +
+    labs(title = city,
+         x = "Date") +
+    scale_y_continuous(labels = scales::comma_format()) +  # Format y-axis labels
+    scale_colour_manual(values = c("Population" = "black", "Workers" = "red")) +
+    theme_minimal()
+  
+  print(p)
+  # Add plot to the list
+  plots[[city]] <- p
+}
+
+
+
+```
+```{r}
+# Create an empty list to store plots
+plots <- list()
+
+for (city in cities) {
+  city_data <- df %>%
+    filter(city == !!city) %>%
+    group_by(date) 
+  
+  p <- ggplot(city_data, aes(x = date)) +
+    geom_line(aes(y = population_month.pop, colour = "Population")) +
+    geom_line(aes(y = workers.geih, colour = "Workers")) +
+    geom_vline(xintercept = as.numeric(as.Date("2020-03-01")), linetype = "dashed", color = "blue") +
+    labs(title = city,
+         x = "",
+         y = "") +
+    scale_y_continuous(labels = scales::comma_format()) +
+    scale_colour_manual(values = c("Population" = "black", "Workers" = "red")) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, size = 20),   # Center the title
+          legend.position = "none",
+          axis.text = element_text(size = 16))  # Increase the size of axis text
+  
+  plots[[city]] <- p
+   
+  print(p)
+}
+
+
+# Combine all plots into a grid
+grid_plot <- do.call(grid.arrange, c(plots, ncol = 2))  # Organize in a 4x4 grid
+
+# Add a new title to the grid plot
+combined_title <- ggdraw() +
+  draw_label("Population vs Workers evolution by City, 2015-2023", fontface = 'bold', size = 14)
+
+# Arrange the title and combined plot vertically
+final_plot <- plot_grid(combined_title, combined_plot, ncol = 1, rel_heights = c(0.1, 0.9))
+
+# Print or save the final plot
+print(final_plot)
+
+```
+"MONTERÍA"          "VILLAVICENCIO"     "PASTO"  "CÚCUTA A.M."       "PEREIRA A.M."      "BUCARAMANGA A.M."  "IBAGUÉ" 
+
+```{r}
+library(gridExtra)
+
+
+# Combine all plots and legends into a grid
+p1 <- grid.arrange(
+  plots[["BOGOTÁ D.C."]],
+  plots[["MEDELLÍN A.M."]],
+  plots[["CALI  A.M."]],
+  plots[["BARRANQUILLA A.M."]],
+  ncol = 2,  # Adjust the number of columns
+  top = textGrob("Evolution of Population vs Employed workers (1/3)", gp = gpar(fontsize = 14, fontface = "bold")),
+  bottom = textGrob("Population (Black) - Workers (Red) | March 2020 - Covid (Blue line)", gp = gpar(fontface = 1, fontsize = 9),hjust = 0.5, x = 0.5)
+)
+
+print(p1)
+```
+```{r}
+# Combine all plots and legends into a grid
+p2 <- grid.arrange(
+  plots[["BUCARAMANGA A.M."]],
+  plots[["CARTAGENA"]],
+  plots[["CÚCUTA A.M."]],
+  plots[["MONTERÍA"]],
+  ncol = 2,  # Adjust the number of columns
+  top = textGrob("Evolution of Population vs Employed workers (2/3)", gp = gpar(fontsize = 14, fontface = "bold")),
+  bottom = textGrob("Population (Black) - Workers (Red) | March 2020 - Covid (Blue line)", gp = gpar(fontface = 1, fontsize = 9),hjust = 0.5, x = 0.5)
+)
+
+print(p2)
+```
+```{r}
+# Combine all plots and legends into a grid
+p3 <- grid.arrange(
+  plots[["VILLAVICENCIO"]],
+  plots[["IBAGUÉ"]],
+  plots[["PEREIRA A.M."]],
+  plots[["PASTO"]],
+  plots[["MANIZALES A.M."]],
+  ncol = 3,  # Adjust the number of columns
+  top = textGrob("Evolution of Population vs Employed workers (3/3)", gp = gpar(fontsize = 14, fontface = "bold")),
+  bottom = textGrob("Population (Black) - Workers (Red) | March 2020 - Covid (Blue line)", gp = gpar(fontface = 1, fontsize = 9),hjust = 0.5, x = 0.5)
+)
+
+print(p3)
+
+
+
+```
+```{r}
+# Export the grid arrangement to a PNG file
+ggsave("arranged_plots_1.png", p1, width = 10, height = 20, units = "in")
+
+```
+
+```{r}
+# Create empty text grob for space
+empty_text <- textGrob("", gp = gpar(fontsize = 32, fontface = "bold"))
+
+# Combine all plots and legends into a grid
+p4 <- grid.arrange(
+  plots[["BOGOTÁ D.C."]],
+  plots[["MEDELLÍN A.M."]],
+  plots[["CALI  A.M."]],
+  plots[["BARRANQUILLA A.M."]],
+  plots[["BUCARAMANGA A.M."]],
+  plots[["CARTAGENA"]],
+  plots[["CÚCUTA A.M."]],
+  plots[["MONTERÍA"]],
+  plots[["VILLAVICENCIO"]],
+  plots[["IBAGUÉ"]],
+  plots[["PEREIRA A.M."]],
+  plots[["PASTO"]],
+  plots[["MANIZALES A.M."]],
+  ncol = 5,  # Adjust the number of columns
+  top = textGrob("Evolution of Population vs Employed Citizens", gp = gpar(fontsize = 32, fontface = "bold")),
+  bottom = textGrob("Population (Black) - Employed Citizens (Red) | March 2020 - Covid (Blue line)", gp = gpar(fontface = 1, fontsize = 20),hjust = 0.5, x = 0.5)
+)
+
+print(p4)
+ggsave("arranged_plots.png", p4, width = 25, height = 20, units = "in")
+
+
+```
+
+
+
+

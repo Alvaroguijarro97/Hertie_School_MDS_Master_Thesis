@@ -650,7 +650,7 @@ acf(diff_workers_ts_2)
 pacf(diff_workers_ts_2)
 
 # Fitting an ARIMA model based on identified parameters
-arima_model <- auto.arima(workers_ts, seasonal = FALSE) #Letting auto.arima find the best predictors
+arima_model <- auto.arima(workers_ts, seasonal = FALSE, d=1) #Letting auto.arima find the best predictors
 arima_model_d<- auto.arima(workers_ts, seasonal = FALSE, d=2) #setting the order of first-differencing to 1
 
 summary(arima_model)
@@ -679,7 +679,7 @@ workers_range <- range(pereira_dataset_subset$workers.geih, forecasts$lower[,2],
 
 # Plot the actual data for the complete dataset
 plot(pereira_dataset_subset$date, pereira_dataset_subset$workers.geih, type='l', col='black', 
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BARRANQUILLA A.M.")
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in PEREIRA A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue')
@@ -719,7 +719,7 @@ cat("ARIMA Model RMSE:", rmse_arima, "\n")
 # If you also want to include a summary of the forecast object
 summary(forecasts)
 ```
-We can visually confirm that the ARIMA model is predicting the variables better than the prior 2 models but the ARIMA model with the d argument manually set to 1 is just producing a straigh line. Let's proceed to store the evaluation results of each to be able to better compare them at the end.
+We can visually confirm that the ARIMA model is predicting the variables better than the prior 2 models but both of the  ARIMA models are not capturing any seasonality trend of the data. Let's proceed to store the evaluation results of each to be able to better compare them at the end.
 ```{r}
 # Initialize an empty data frame to store the model summary statistics
 model_summaries <- data.frame(
@@ -745,7 +745,7 @@ model_summaries <- rbind(model_summaries, data.frame(
   MAE = ols_mae,
   RMSE = ols_rmse,
   R_Squared = ols_summary$r.squared,
-  P_Value = 5.165e-09, # Manually get it
+  P_Value = 1.785e-05, # Manually get it
   Residual_SE = ols_summary$sigma,
   AIC = AIC(stepwise_model_per),
   AICc = AIC(stepwise_model_per) + (2 * length(coef(stepwise_model_per)) * (length(coef(stepwise_model_per)) + 1)) / (length(resid(stepwise_model_per)) - length(coef(stepwise_model_per)) - 1),
@@ -763,7 +763,7 @@ model_summaries <- rbind(model_summaries, data.frame(
   MAE = sig_ols_mae,
   RMSE = sig_ols_rmse,
   R_Squared = sig_ols_summary$r.squared,
-  P_Value = 3.526e-10, # Manually get it
+  P_Value = 2.373e-05, # Manually get it
   Residual_SE = sig_ols_summary$sigma,
   AIC = AIC(stepwise_model_per_sig),
   AICc = AIC(stepwise_model_per_sig) + (2 * length(coef(stepwise_model_per_sig)) * (length(coef(stepwise_model_per_sig)) + 1)) / (length(resid(stepwise_model_per_sig)) - length(coef(stepwise_model_per_sig)) - 1),
@@ -795,7 +795,7 @@ arima_d_summary <- summary(arima_model_d)
 
 # Add ARIMA model metrics to the data frame
 model_summaries <- rbind(model_summaries, data.frame(
-  Model = "ARIMA with d=1",
+  Model = "ARIMA with d=2",
   MAE = arima_d_mae,
   RMSE = arima_d_rmse,
   R_Squared = NA, # ARIMA models do not have R-squared
@@ -839,7 +839,7 @@ pacf(residuals_arima, main='PACF of ARIMA Residuals')
 
 ```
 Here is what we can conclude from each of the previous plots, and what they are evaluating:
-*Residuals*: Use to visually assess the randomness and distribution of the residuals in our prediction. The plot of the residuals of the ARIMA model appears to exhibit some pattern, as indicated by the significant swings above and below the zero line. This suggests that the model may not be fully capturing the underlying data structure, which might be due to seasonality or another form of autocorrelation not addressed by the model.
+*Residuals*: Use to visually assess the randomness and distribution of the residuals in our prediction. The plot of the residuals of the ARIMA model appears to exhibit some pattern, as indicated by the valley shape under the zero line. This suggests that the model may not be fully capturing the underlying data structure, which might be due to seasonality or another form of autocorrelation not addressed by the model.
 *ACF*: Used to show the correlation of the time series with its own lagged values.  It shows that most of the autocorrelations for various lags are within the blue confidence limits, which suggests that there is little autocorrelation remaining in the residuals. However, there are a couple of lags that exceed the confidence bounds, which indicates that some autocorrelation may still be present.
 *PACF*: Used for identifying the number of AR (Autoregressive) terms. There are a few lags with significant partial autocorrelations, suggesting that the ARIMA model could potentially benefit from including additional AR terms to better capture the data structure.
 
@@ -861,14 +861,11 @@ Let's visualize this result with our other models to see how it is behaving.
 all_confidence_intervals <- c(forecasts$lower[,2], forecasts$upper[,2], 
                               sarima_forecasts$lower[,2], sarima_forecasts$upper[,2])
 
-workers_range <- range(pereira_dataset_subset$workers.geih, 
-                       quantile(test_data_per$predicted_workers,0.25), 
-                       test_data_per$predicted_workers_sig, 
-                       all_confidence_intervals)
+workers_range <- range(pereira_dataset_subset$workers.geih)
 
 plot(pereira_dataset_subset$date, pereira_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
      xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, 
-     main="Forecasts Comparison for Employed Workers in BARRANQUILLA A.M.")
+     main="Forecasts Comparison for Employed Workers in PEREIRA A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
@@ -903,7 +900,7 @@ par(xpd=FALSE) # Turn off drawing outside plot region
 ```{r visualizing models}
 # Plot the actual data for the complete dataset
 plot(pereira_dataset_subset$date, pereira_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BARRANQUILLA A.M.")
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in PEREIRA A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
@@ -926,15 +923,14 @@ abline(v = as.numeric(min(test_data_per$date)), col="black", lwd=1.8, lty=2)
 
 # Update the legend with SARIMA
 legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
-       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
-                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=2 Forecast", 
+       legend=c("Actual (2016-2019)", "ARIMA Forecast","ARIMA d=2 Forecast", 
                 "SARIMA Forecast"), 
-       col=c("black", "red", "gold", "blue", "darkviolet","green"), 
-       lty=c(1, 1, 1, 1, 1, 1), 
-       lwd=c(2, 2, 2, 2, 2, 2), 
+       col=c("black", "blue", "darkviolet","green"), 
+       lty=c(1, 1, 1, 1), 
+       lwd=c(2, 2, 2, 2), 
        merge=TRUE, 
        cex=0.7, 
-       fill=c("black", "red", "gold", "blue", "darkviolet","green"),
+       fill=c("black", "blue", "darkviolet","green"),
        bty="n") 
 par(xpd=TRUE) # Turn off drawing outside plot region
 ```
@@ -962,7 +958,7 @@ model_summaries <- rbind(model_summaries, data.frame(
 # Print the model summaries data frame
 print(model_summaries)
 ```
-The SARIMA model gave the same results as the initial ARIMA prediction. Let's see if we can obtain better results fitting a Random Forrest Model to see if it can outperform the models we have so far.
+The SARIMA model did not produce better results as the initial ARIMA predictions. Let's see if we can obtain better results fitting a Random Forrest Model to see if it can outperform the models we have so far.
 ```{r Random forrest}
 # Load data
 data_rf <- pereira_dataset_subset
@@ -1027,7 +1023,7 @@ barplot(importance, main="Feature Importance in Random Forest Model", horiz=TRUE
 ```{r visualizing model results}
 # Plot the actual data for the complete dataset
 plot(pereira_dataset_subset$date, pereira_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BARRANQUILLA A.M.")
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in PEREIRA A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
@@ -1054,7 +1050,7 @@ abline(v = as.numeric(min(test_data_per$date)), col="black", lwd=1.8, lty=2)
 # Update the legend with Random Forest
 legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
        legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
-                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=1 Forecast", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=2 Forecast", 
                 "SARIMA Forecast", "Random Forest Prediction"), 
        col=c("black", "red", "gold", "blue", "darkviolet", "green", "orange"), 
        lty=c(1, 1, 1, 1, 1, 1, 1), 
@@ -1139,7 +1135,8 @@ rf_model_rmse <- train(
   method = "ranger", 
   trControl = control,
   tuneLength = 10,
-  metric = "RMSE"
+  metric = "RMSE",
+  importance = 'impurity' # This tells ranger to calculate variable importance
 )
 
 # Train the Random Forest model focusing on R-squared
@@ -1149,7 +1146,8 @@ rf_model_rsquared <- train(
   method = "ranger", 
   trControl = control,
   tuneLength = 10,
-  metric = "Rsquared"
+  metric = "Rsquared",
+  importance = 'impurity' # This tells ranger to calculate variable importance
 )
 
 # Predict on the test set for both models
@@ -1211,7 +1209,7 @@ print(paste("Best R-squared Model - MAE:", MAE_rsquared, "RMSE:", RMSE_rsquared,
 ```{r}
 # Plot the actual data for the complete dataset
 plot(pereira_dataset_subset$date, pereira_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
-     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BARRANQUILLA A.M.")
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in PEREIRA A.M.")
 
 # ARIMA forecast line
 lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
@@ -1256,11 +1254,6 @@ legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
 par(xpd=TRUE) # Allow drawing outside plot region
 ```
 
-```{r}
-# Remove by model name
-model_summaries <- model_summaries[!(model_summaries$Model == "SARIMA"), ]
-model_summaries
-```
 
 ```{r}
 # Get the names of features used in the model (excluding the response variable)
@@ -1292,7 +1285,7 @@ extract_rf_vars <- function(model) {
 model_var_summary <- list()
 
 # For OLS models
-model_var_summary$OLS <- extract_lm_vars(baq_basic_ols)
+model_var_summary$OLS <- extract_lm_vars(stepwise_model_per)
 model_var_summary$OLS_Significant <- extract_lm_vars(stepwise_model_per_sig)
 
 # For Random Forest
@@ -1320,5 +1313,173 @@ print(model_vars_df)
 
 ```
 
+```{r importance for RF Model}
+# Convert the matrix to a data frame
+importance_df <- as.data.frame(importance)
+
+# Add the feature names as a new column from the row names
+importance_df$Feature <- rownames(importance_df)
+
+# Sort the data frame by importance
+importance_df <- importance_df[order(-importance_df$IncNodePurity), ]
+
+# Select the top N features for clarity
+top_n <- 10
+importance_top_n <- head(importance_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_top_n$IncNodePurity, 
+        main="Feature Importance in Random Forest Model",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_top_n$Feature, xpd = TRUE, cex = 0.75)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+```{r Get RF Models}
+# Extract the ranger model from the caret train object
+ranger_model_rf <- rf_model$finalModel
+ranger_model_rmse <- rf_model_rmse$finalModel
+ranger_model_rsquared <- rf_model_rsquared$finalModel
+
+# Now you can calculate variable importance directly from the ranger model
+importance_rf <- ranger_model_rf$variable.importance
+importance_rmse <- ranger_model_rmse$variable.importance
+importance_rsquared <- ranger_model_rsquared$variable.importance
+
+# The importance is returned as a named vector, you can sort it to see the most important variables
+sorted_importance_rf <- sort(importance_rf, decreasing = TRUE)
+sorted_importance_rmse <- sort(importance_rmse, decreasing = TRUE)
+sorted_importance_rsquared <- sort(importance_rsquared, decreasing = TRUE)
+
+# To view the importance
+print(sorted_importance_rf)
+print("")
+print(sorted_importance_rmse)
+print("")
+print(sorted_importance_rsquared)
+
+```
+
+```{r rf RMSE x}
+# Convert the matrix to a data frame
+importance_r2_df <- as.data.frame(sorted_importance_rmse)
+
+# Add the feature names as a new column from the row names
+importance_r2_df$Feature <- rownames(importance_r2_df)
+
+# Select the top N features for clarity
+top_n <- 10
+importance_r2_top_n <- head(importance_r2_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_r2_top_n$sorted_importance_rmse, 
+        main="Feature Importance in Random Forest Model focused on RMSE",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_r2_top_n$Feature, xpd = TRUE, cex = 0.75)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+
+```{r rf Rsquared x}
+# Convert the matrix to a data frame
+importance_r3_df <- as.data.frame(sorted_importance_rsquared)
+
+# Add the feature names as a new column from the row names
+importance_r3_df$Feature <- rownames(importance_r3_df)
+
+# Select the top N features for clarity
+top_n <- 10
+importance_r3_top_n <- head(importance_r3_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_r3_top_n$sorted_importance_rsquared, 
+        main="Feature Importance in Random Forest Model focused on R squared",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_r3_top_n$Feature, xpd = TRUE, cex = 0.5)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+
+```{r export result summaries}
+# Assuming 'df' is your dataframe
+write_xlsx(model_summaries, path = "pereira_results.xlsx")
+
+```
+
+
+```{r export plot}
+# Open a PNG graphics device
+png("pereira_results.png", width=600, height=500)  # Adjust 'width' and 'height' as needed
+
+# Plot the actual data for the complete dataset
+plot(pereira_dataset_subset$date, pereira_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in PEREIRA A.M.")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
+
+# ARIMA d=1 forecast line
+lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
+
+# SARIMA forecast line
+sarima_forecast_dates <- seq(from = min(test_data_per$date), 
+                             by = "month", 
+                             length.out = length(sarima_forecasts$mean))
+lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
+
+# OLS forecasted data
+lines(test_data_per$date, test_data_per$predicted_workers, col='red', lwd=1.8)
+lines(test_data_per$date, test_data_per$predicted_workers_sig, col='gold', lwd=1.8)
+
+# Random Forest model predictions
+lines(test_dates, predictions_rf, col='orange', lwd=1.8)
+
+# Random Forest model predictions optimized for RMSE
+lines(test_dates, predictions_rmse, col='darkgreen', lwd=1.8, lty=2)
+
+# Random Forest model predictions optimized for R-squared
+lines(test_dates, predictions_rsquared, col='cyan', lwd=1.8, lty=2)
+
+# Add a vertical line for the last day of the training data
+abline(v = as.numeric(min(test_data_per$date)), col="black", lwd=1.8, lty=2)
+
+# Update the legend with Random Forest predictions
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=2 Forecast", 
+                "SARIMA Forecast", "RF Prediction","RF Prediction (Best RMSE)", "RF Prediction (Best R-squared)"), 
+       col=c("black", "red", "gold", "blue", "darkviolet", "green", "orange", 'darkgreen',"cyan"), 
+       lty=c(1, 1, 1, 1, 1, 1, 1, 2, 2), 
+       lwd=c(2, 2, 2, 2, 2, 2, 2, 2, 2), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue", "darkviolet", "green", "orange", 'darkgreen', "cyan"),
+       bty="n") 
+par(xpd=TRUE) # Allow drawing outside plot region
+
+# Close the graphics device
+dev.off()
+```
 
 

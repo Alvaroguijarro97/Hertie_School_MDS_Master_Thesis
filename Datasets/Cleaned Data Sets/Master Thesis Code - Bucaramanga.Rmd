@@ -1,0 +1,1469 @@
+---
+title: "Master Thesis Code"
+author: "Alvaro Guijarro"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries, include=Fase}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(forecast)
+library(stats)
+library(tseries)
+library(skimr)
+library(fmtr)
+library(plotly)
+library(corrplot)
+library(tseries)
+library(rvest)
+library(caret)
+library(progress)
+library(lmtest)
+library(car)
+library(randomForest)
+```
+
+Initially, lets obtain our different variables. 
+```{r read datasets}
+GEIH <- read_excel("GEIH_cleaned_2015-03-2023-12.xlsx")
+Population <- read_excel("Population_cleaned_2010-12-2023-12.xlsx")
+CPI <- read_excel("CPI_Information_cleaned_2015-01-2024-01.xlsx")
+Education <- read_excel("Education_data_cleaned_2011-12-2022-12.xlsx")
+Monetary_poverty <- read_excel("Monetary_Poverty_cleaned_2012-12-2022-12.xlsx")
+cities_indicators <- read_excel("Cities_Indicators_cleaned_2016-12-2021-12.xlsx")
+fiscal_performance <- read_excel("Fiscal_Performance_cleaned_2000-12-2022-12.xlsx")
+latitude_longitude <- read_excel("Latitude_Longitude_cleaned.xlsx")
+score_fiscal_performance <- read_excel("Score_Fiscal_Performance_cleaned_2015-12-2022-12.xlsx")
+```
+
+Let's observe the first rows of each dataset. 
+```{r proof they have the necessary information}
+head(GEIH)
+head(Population)
+head(CPI)
+head(Education)
+head(Monetary_poverty)
+head(cities_indicators)
+head(fiscal_performance)
+head(latitude_longitude)
+head(score_fiscal_performance)
+```
+Let's look more into each dataset datatype and summary
+```{r}
+skim(GEIH)
+skim(Population)
+skim(CPI)
+skim(Education)
+skim(Monetary_poverty)
+skim(cities_indicators)
+skim(fiscal_performance)
+skim(latitude_longitude)
+skim(score_fiscal_performance)
+```
+There are no missing variables in our datasets. They have different scales and sizing, which we should keep in mind for our future analysis. 
+
+Now, let's make sure all of the columns are in the same format in order to perform the join into a main dataframe. 
+```{r}
+GEIH$date <- format(as.Date(GEIH$date), "%Y-%m")
+GEIH$city <- as.character(GEIH$city)
+
+Population$date <- format(as.Date(Population$date), "%Y-%m")
+Population$city <- as.character(Population$city)
+
+
+summary(GEIH)
+summary(Population)
+```
+Let's filter our GEIH data so we only have the 13 cities we will look into out analysis. The scope of this Master Thesis will only include the 13 biggest cities in Colombia as of the time of writing. 
+
+```{r}
+print("Initial GEIH unique cities")
+unique(GEIH$city)
+print("Initial Population unique cities")
+unique(Population$city)
+GEIH_c <- GEIH %>%
+  filter(city  %in% c("BARRANQUILLA A.M.","BOGOTÁ D.C.","BUCARAMANGA A.M.","CALI A.M.","CARTAGENA","CÚCUTA A.M.","IBAGUÉ","MANIZALES A.M.","MEDELLÍN A.M.","MONTERÍA","PASTO","PEREIRA A.M.","VILLAVICENCIO"))
+
+print("Cities of interest for the GEIH")
+unique(GEIH_c$city)
+```
+
+Let's add a tag to each variable to identify from which dataset they came from
+```{r}
+# Function to rename columns with a suffix, excluding specified columns
+rename_with_suffix <- function(df, suffix, exclude = c()) {
+  df %>% rename_with(~paste0(., suffix), -all_of(exclude))
+}
+
+GEIH_c <- rename_with_suffix(GEIH_c, ".geih", exclude = c("city", "date"))
+Population <- rename_with_suffix(Population, ".pop", exclude = c("city", "date"))
+CPI <- rename_with_suffix(CPI, ".cpi", exclude = c("city", "date"))
+Education <- rename_with_suffix(Education, ".edu", exclude = c("city", "date"))
+Monetary_poverty <- rename_with_suffix(Monetary_poverty, ".mp", exclude = c("city", "date"))
+cities_indicators <- rename_with_suffix(cities_indicators, ".ci", exclude = c("city", "date"))
+fiscal_performance <- rename_with_suffix(fiscal_performance, ".fp", exclude = c("city", "date"))
+latitude_longitude <- rename_with_suffix(latitude_longitude, ".ll", exclude = c("city"))
+score_fiscal_performance <- rename_with_suffix(score_fiscal_performance, ".sfp", exclude = c("city", "date"))
+
+```
+
+Let's identify what time frames are we working for on each dataset? 
+```{r}
+# Function to get the date range of a dataset
+get_date_range <- function(df, date_column) {
+  range(df[[date_column]], na.rm = TRUE)
+}
+
+# Applying the function to each dataset and printing the date ranges
+GEIH_date_range <- get_date_range(GEIH_c, "date")
+Population_date_range <- get_date_range(Population, "date")
+CPI_date_range <- get_date_range(CPI, "date")
+Education_date_range <- get_date_range(Education, "date")
+Monetary_poverty_date_range <- get_date_range(Monetary_poverty, "date")
+cities_indicators_date_range <- get_date_range(cities_indicators, "date")
+fiscal_performance_date_range <- get_date_range(fiscal_performance, "date")
+score_fiscal_performance_date_range <- get_date_range(score_fiscal_performance, "date")
+
+# Print the date ranges
+print(paste("GEIH_c date range:", GEIH_date_range[1], "/", GEIH_date_range[2]))
+print(paste("Population date range:", Population_date_range[1], "/", Population_date_range[2]))
+print(paste("CPI date range:", CPI_date_range[1], "/", CPI_date_range[2]))
+print(paste("Education date range:", Education_date_range[1], "/", Education_date_range[2]))
+print(paste("Monetary_poverty date range:", Monetary_poverty_date_range[1], "/", Monetary_poverty_date_range[2]))
+print(paste("cities_indicators date range:", cities_indicators_date_range[1], "/", cities_indicators_date_range[2]))
+print(paste("fiscal_performance date range:", fiscal_performance_date_range[1], "/", fiscal_performance_date_range[2]))
+print(paste("score_fiscal_performance date range:", score_fiscal_performance_date_range[1], "/", score_fiscal_performance_date_range[2]))
+
+```
+In Colombia, administrative periods for Mayors and Governors are for 4 years since 2008. Our datasets span between several administrative time periods (2008-2011 / 2012-2015 / 2016-2019 / 2020-2023 / 2024-2027), taking into consideration the 2020 Covid-19 pandemic and the disruption that brought to global health, economic, logistical, and productive systems, as well as the introduction of the MDM statistic in 2016 ("Medición de Desempeño Municipal" = Municipal Performance Measurement, which ranks Colombian cities by their performance on various key economic, health, safety, and demographic indicators) we will be working with the *2016-2019* administrative time period for our prediction. 
+```{r}
+# Perform left joins to combine datasets based on 'city' and 'date'
+df_analysis <- GEIH_c %>%
+  left_join(Population, by = c("city", "date"), suffix = c("", ".pop")) %>%
+  left_join(CPI, by = c("city", "date"), suffix = c("", ".cpi")) %>%
+  left_join(Education, by = c("city", "date"), suffix = c("",".edu")) %>%
+  left_join(Monetary_poverty, by = c("city", "date"), suffix = c("",".mp")) %>%
+  left_join(cities_indicators, by = c("city", "date"), suffix = c("",".ci")) %>%
+  left_join(fiscal_performance, by = c("city", "date"), suffix = c("",".fp")) %>%
+  left_join(latitude_longitude, by = c("city"), suffix = c("",".ll")) %>%
+  left_join(score_fiscal_performance, by = c("city", "date"), suffix = c("",".sfp")) %>%
+  filter(date >= "2016-12" , date <= "2019-12")
+
+unique(df_analysis$city)
+unique(df_analysis$date)
+
+skim(df_analysis)
+summary(df_analysis)
+head(df_analysis)
+dim(df_analysis)
+```
+Now we have a dataset that contains the information from 2016-12 until 2019-12 for 13 Colombian cities and span between 16 economic sectors. We will proceed to work only with the total employed population in this cities for this Master Thesis. Let's rename and filter our dataset to only include that information. 
+
+```{r}
+unique(df_analysis$Concepto.geih)
+
+# List of unique worker types in the Concepto.geih column
+worker_types <- unique(df_analysis$Concepto.geih)
+df_analysis$Concepto.geih <- as.character(df_analysis$Concepto.geih)
+economic_activities <- c(
+  "Ocupados" = "Employed",
+  "No informa" = "Not Reported",
+  "Agricultura, ganadería, caza, silvicultura y pesca" = "Agriculture, Livestock, Hunting, Forestry, and Fishing",
+  "Explotación de minas y canteras" = "Mining and Quarrying",
+  "Industrias manufactureras" = "Manufacturing Industries",
+  "Suministro de electricidad gas, agua y gestión de desechos" = "Electricity, Gas, Water Supply, and Waste Management",
+  "Construcción" = "Construction",
+  "Comercio y reparación de vehículos" = "Commerce and Vehicle Repair",
+  "Alojamiento y servicios de comida" = "Accommodation and Food Services",
+  "Transporte y almacenamiento" = "Transportation and Storage",
+  "Información y comunicaciones" = "Information and Communications",
+  "Actividades financieras y de seguros" = "Financial and Insurance Activities",
+  "Actividades inmobiliarias" = "Real Estate Activities",
+  "Actividades profesionales, científicas, técnicas y servicios administrativos" = "Professional, Scientific, Technical Activities, and Administrative Services",
+  "Administración pública y defensa, educación y atención de la salud humana" = "Public Administration and Defense, Education, and Human Health Care", 
+  "Actividades artísticas, entretenimiento recreación y otras actividades de servicios" = "Artistic Activities, Entertainment, Recreation, and Other Service Activities")
+
+df_analysis_eng <- df_analysis %>%
+  mutate(
+    Concepto.geih = case_when(
+      Concepto.geih == "Ocupados" ~ "Employed",
+      Concepto.geih == "No informa" ~ "Not Reported",
+      Concepto.geih == "Agricultura, ganadería, caza, silvicultura y pesca" ~ "Agriculture, Livestock, Hunting, Forestry, and Fishing",
+      Concepto.geih == "Explotación de minas y canteras" ~ "Mining and Quarrying",
+      Concepto.geih == "Industrias manufactureras" ~ "Manufacturing Industries",
+      Concepto.geih == "Suministro de electricidad gas, agua y gestión de desechos" ~ "Electricity, Gas, Water Supply, and Waste Management",
+      Concepto.geih == "Construcción" ~ "Construction",
+      Concepto.geih == "Comercio y reparación de vehículos" ~ "Commerce and Vehicle Repair",
+      Concepto.geih == "Alojamiento y servicios de comida" ~ "Accommodation and Food Services",
+      Concepto.geih == "Transporte y almacenamiento" ~ "Transportation and Storage",
+      Concepto.geih == "Información y comunicaciones" ~ "Information and Communications",
+      Concepto.geih == "Actividades financieras y de seguros" ~ "Financial and Insurance Activities",
+      Concepto.geih == "Actividades inmobiliarias" ~ "Real Estate Activities",
+      Concepto.geih == "Actividades profesionales, científicas, técnicas y servicios administrativos" ~ "Professional, Scientific, Technical Activities, and Administrative Services",
+      Concepto.geih == "Administración pública y defensa, educación y atención de la salud humana" ~ "Public Administration and Defense, Education, and Human Health Care",
+      Concepto.geih == "Actividades artísticas, entretenimiento recreación y otras actividades de servicios" ~ "Artistic Activities, Entertainment, Recreation, and Other Service Activities",
+      TRUE ~ Concepto.geih  # Default case to handle any other unmentioned values
+    )
+  )
+
+
+str(df_analysis_eng)
+colnames(df_analysis_eng)
+```
+
+From the joins we have some repeated variables. Let's only select the columns that are of our interest:
+```{r}
+df_analysis_selected <- df_analysis_eng %>% 
+  select(-city_id.pop,-city_id.edu,-year.edu,-month.edu,-year.mp,-month.mp,-year.ci,-month.ci,-year.fp,-month.fp,-year.sfp,-month.sfp,-capital.ll) %>%
+  rename( "eco_activity" = "Concepto.geih", 
+          "year" = "year.pop",
+          "month" = "month.pop",
+          "CPI_YTD.cpi" ="CPI_year_to_date_var.cpi",
+          "Self_financing_of_operating_expenses.sfp" = "Self-financing_of_operating_expenses.sfp")
+str(df_analysis_selected)
+
+#Let's add a description of what each variables means and in what unit they are stored, in order to preprocess it before setting up our prediction models.
+descriptions(df_analysis_selected) <- list(
+  city = "Name of a city in Colombia",
+  eco_activity= "Type of Economic Activity under CIIU 4 A.C",
+  date = "date - Year and Month",
+  workers.geih = "population - Employed population",
+  population_month.pop = "population - Total Population in monthly frecuency (interpolated)",
+  year = "date - Year",
+  month = "date - Month",
+  population_year.pop = "population - Total Population in yearly frecuency",
+  CPI.cpi = "Consumer Price Index, The Consumer Price Index (CPI) is a measure that examines the weighted average of prices of a basket of consumer goods and services, such as transportation, food, and medical care. The CPI is calculated by taking price changes for each item in the predetermined basket of goods and averaging them. ",
+  CPI_YTD.cpi = "% variance -  The CPI (Consumer Price Index) year-to-date (YTD) variance refers to the change in the CPI from the beginning of the current year up to a specific point in time within the same year. ",
+  CPI_year_var.cpi = "% variance - The CPI (Consumer Price Index) yearly variance refers to the percentage change in the CPI over a 12-month period. It measures the rate of inflation or deflation by comparing the price level of the CPI at the end of a year to the price level at the end of the previous year.",
+  CPI_month_var.cpi = "% variance - The CPI (Consumer Price Index) monthly variance refers to the change in the CPI from one month to the next, expressed as a percentage. This measure provides an indication of how consumer prices have moved within a month, reflecting short-term inflation or deflation trends.",
+  Enrollment_Rate_5_16.edu = "% - Proportion of the population between 5 and 16 years old who are attending the educational system. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage.edu = "% - It is the ratio between the number of students enrolled in transition, primary, secondary, and high school who have the theoretical age (5 to 16 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_Transition.edu = "% - It is the ratio between the number of students enrolled in transition who have the theoretical age to attend this level (5 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_Primary.edu = "% - It is the ratio between the number of students enrolled in primary who have the theoretical age to attend this level (6 to 10 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_Secondary.edu = "% - It is the ratio between the number of students enrolled in secondary who have the theoretical age to attend this level (11 to 14 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Net_Coverage_HighSchool.edu = "% - # It is the ratio between the number of students enrolled in high school who have the theoretical age to attend this level (15 to 16 years) and the total population of that same age. When DANE's population projections do not adequately capture internal migratory flows, it can reach values greater than 100%.",
+  Dropout_Rate.edu = "% - # Intra-annual dropout rate of the official sector. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_Transition.edu = "% - Intra-annual dropout rate of the official sector in transition. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_Primary.edu = "% - Intra-annual dropout rate of the official sector in primary. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_Secondary.edu = "% - Intra-annual dropout rate of the official sector in secondary. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Dropout_Rate_HighSchool.edu = "% - Intra-annual dropout rate of the official sector in high school. Identifies the proportion of enrolled students who, due to cultural factors, conjunctural situations, or the provision of educational service, leave their studies during the academic year.",
+  Pass_Rate.edu = "% - Pass rate of students in the official sector. Identifies the percentage of students in preschool, basic, and high school education who pass according to current educational plans and programs.",
+  Pass_Rate_Transition.edu = "% - Pass rate of students in the official sector in transition. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Pass_Rate_Primary.edu = "% - Pass rate of students in the official sector in primary. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Pass_Rate_Secondary.edu = "% - Pass rate of students in the official sector in secondary. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Pass_Rate_HighSchool.edu = "% - Pass rate of students in the official sector in high school. Identifies the percentage of students at this educational level who pass according to current educational plans and programs.",
+  Fail_Rate.edu = "% - Failure rate of students in the official sector. Identifies the percentage of students in preschool, basic, and high school education who fail according to current educational plans and programs.",
+  Fail_Rate_Transition.edu = "% - Failure rate of students in the official sector in transition. Identifies the percentage of students at this educational level who fail according to current educational plans and programs.",
+  Fail_Rate_Primary.edu = "% - Failure rate of students in the official sector in primary. Identifies the percentage of students at this educational level who fail according to current educational plans and programs.",
+  Fail_Rate_Secondary.edu = "% - Repetition rate of the official sector. Corresponds to the percentage of students enrolled in secondary education who are repeating the same grade as the previous year.",
+  Fail_Rate_HighSchool.edu = "% - Repetition rate of the official sector. Corresponds to the percentage of students enrolled in high school who are repeating the same grade as the previous year.",
+  I_PM.mp = "% of population - Monetary Poverty Rate",
+  I_PME.mp = "% of population - Extreme Monetary Poverty Rate",
+  Gini.mp = "Gini Coeficient (values between 0-1)",
+  IPUG.mp = "$COP Values in Current Pesos - Average Per Capita Income of the Household Spending Unit",
+  LP.mp = "$COP Values in Current Pesos - Monetary Poverty Lines (monthly values per person)",
+  LPE.mp = "$COP Extreme Monetary Poverty Lines (monthly values per person), Values in Current Pesos",
+  MDM_Resource_Mobilization.ci = "Score between 1-100 - Measures mobilization of financial resources",
+  Tax_And_Non_Tax_Revenue_Per_Capita.ci = "$ COP Values in Current Pesos - Tax and non-tax revenue per capita, excluding territorial order collections",
+  Revenue_From_OT_Instruments_Per_Capita.ci = "$ COP Values in Current Pesos - Revenue collected through territorial ordering instruments per capita",
+  Investment_Financed_By_Own_Resources.ci = "% - Percentage of investment financed by the municipality's own resources",
+  MDM_Execution_Of_Resources.ci = "Score between 1-100 - Execution of financial resources",
+  MDM_Open_Government_And_Transparency.ci = "Score between 1-100 - Measures of open government and transparency practices",
+  MDM_Territorial_Ordering.ci = "Score between 1-100 - Territorial ordering and planning measures",
+  Effective_Collection_Rate.ci = "Effective rate of tax collection",
+  MDM_Education.ci = "Score between 1-100 - Educational coverage and quality in middle education",
+  MDM_Health_Coverage.ci = "Score between 1-100 - Health coverage and services",
+  Health_Coverage_Overall.ci = "% of Population - Overall health coverage from the affiliate registry",
+  Pentavalent_Vaccination_Coverage.ci = "% of Populaion - Coverage rate of the pentavalent vaccine in infants",
+  Infant_Mortality_Rate.ci = "# of infant deaths - Infant mortality rate per 1,000 live births",
+  MDM_Services.ci = "Score 1-100 - Coverage and quality of public services",
+  Rural_Electrical_Coverage.ci = "% of Population - Coverage of rural electrical service",
+  Broadband_Penetration.ci = "% of Population - Number of broadband Internet subscribers relative to the total population",
+  Aqueduct_Coverage.ci = "% of Populaion - Coverage of aqueduct water service",
+  Sewerage_Coverage.ci = "% of Population - Coverage of sewerage service",
+  MDM_Security_And_Coexistence.ci = "Score 1-100 - Security and social coexistence indicators",
+  Theft_Rate_Per_10k_Inhabitants.ci = "# Reported theft cases per 10,000 inhabitants",
+  Homicide_Rate_Per_10k_Inhabitants.ci = "# Homicide cases per 10,000 inhabitantsHomicide cases per 10,000 inhabitants",
+  Domestic_Violence_Rate_Per_10k_Inhabitants.ci = "# of Domestic violence cases per 10,000 inhabitants",
+  TotalIncome.fp = "$ Millions of Pesos - Total income received.",
+  CurrentIncome.fp = "$ Millions of Pesos - Current (or operational) income.",
+  TaxIncome.fp = "$ Millions of Pesos - Income received from taxes.",
+  PropertyTax.fp = "$ Millions of Pesos - Property tax income.",
+  IndustryAndCommerceTax.fp = "$ Millions of Pesos - Tax from industry and commerce activities.",
+  FuelSurcharge.fp = "$ Millions of Pesos - Surcharge on fuel.",
+  OtherTaxIncome.fp = "$ Millions of Pesos - Other tax-related income.",
+  NonTaxIncome.fp = "$ Millions of Pesos - Non-tax related income.",
+  CurrentTransfers.fp = "$ Millions of Pesos - Current transfers received.",
+  NationalLevelCurrentTransfers.fp = "$ Millions of Pesos - Current transfers from the national level.",
+  OtherTransfers.fp = "$ Millions of Pesos - Other transfers.",
+  TotalExpenses.fp = "$ Millions of Pesos - Total expenses.",
+  CurrentExpenses.fp = "$ Millions of Pesos - Current (or operational) expenses.",
+  OperatingExpenses.fp = "$ Millions of Pesos - Operating expenses.",
+  PersonalServices.fp = "$ Millions of Pesos - Expenses on personal services.",
+  GeneralExpenses.fp = "$ Millions of Pesos - General expenses.",
+  TransfersPaid.fp = "$ Millions of Pesos - Transfers paid out.",
+  PublicDebtInterests.fp = "$ Millions of Pesos - Interests on public debt.",
+  CurrentDissaving_Saving.fp = "$ Millions of Pesos - Current dissaving or saving.",
+  CapitalIncome.fp = "$ Millions of Pesos - Income from capital.",
+  Royalties.fp = "$ Millions of Pesos - Income from royalties.",
+  NationalTransfers.fp = "$ Millions of Pesos - Transfers from the national level.",
+  "Co-financing.fp" = "$ Millions of Pesos - Co-financing.",
+  OtherCapitalIncome.fp = "$ Millions of Pesos - Other capital income.",
+  CapitalExpenses.fp = "$ Millions of Pesos - - Capital expenses.",
+  GrossCapitalFormation.fp = "$ Millions of Pesos - Gross capital formation.",
+  OtherCapitalExpenses.fp = "$ Millions of Pesos - Other capital expenses.",
+  TotalDeficitOrSurplus.fp = "$ Millions of Pesos - Total deficit or surplus.",
+  FINANCING.fp = "$ Millions of Pesos - Financing.",
+  NetCredit.fp = "$ Millions of Pesos - Net credit.",
+  Disbursements.fp = "$ Millions of Pesos - Disbursements.",
+  Amortizations.fp = "$ Millions of Pesos - Amortizations.",
+  BalanceResources_VariationInDepositsAndOthers.fp = "$ Millions of Pesos - Balance resources, variation in deposits, and others.",
+  lat.ll = "Latidude",
+  lng.ll = "Longitud",
+  lat_z.ll = "Z - transformation of Latitude",
+  lng_z.ll = "Z - transformation of Longitute",
+  Self_financing_of_operating_expenses.sfp = "Score 1-100 - Self-financing of operating expenses: the ability to cover the operating expenses of the central administration with unrestricted income (Law 617 of 2000) ",
+  Debt_service_support.sfp = "Score 1-100 - Debt service support: the ability to support debt service with perceived revenues.",
+  Dependence_on_transfers_from_the_Nation_and_Royalties.sfp = "Score 1-100 - Dependence on transfers from the Nation and Royalties: measures the importance of national transfers and royalties (SGR) in total revenues.",
+  Generation_of_Own_Resources.sfp = "Score 1-100 - Generation of Own Resources: the ability to generate resources complementary to the transfers.",
+  Magnitude_of_Investment.sfp = "Score 1-100 - Magnitude of Investment: quantifies the magnitude of the investment executed by the territorial entity.",
+  Saving_Capacity.sfp = "Score 1-100 - Saving Capacity: determines the degree to which surpluses are freed up to finance investment.", 
+  Fiscal_Performance_Indicator.sfp = "Score 1-100 - Fiscal Performance Indicator",
+  Category.sfp = "Category - Type of Fiscar Performance of city "                                         
+)
+```
+
+Let's now subset our data only on the employed workers as stated before (where "eco_activity" = Employed)
+
+```{r}
+df_analysis_selected$month <- as.numeric(df_analysis_selected$month)
+employed_data <- df_analysis_selected %>% 
+  filter(eco_activity == "Employed") 
+```
+
+What does our worker population looks like for each of the cities we are interested in? 
+```{r}
+# 1. Trend Analysis by City
+plotly_obj <- plot_ly(data = employed_data, x = ~date, y = ~workers.geih, 
+                      color = ~city, colors = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+                      type = 'scatter', mode = 'lines+markers',
+                      text = ~city, hoverinfo = 'text+x+y') %>%
+  layout(title = "Total Number of Workers Over Time by City from 2016 to 2019",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Number of Workers"), 
+         legend = list(orientation = "v", x = 1.05, y = 1))
+
+# Display the interactive plot
+plotly_obj
+```
+Let's see each city individually_
+```{r}
+# Unique cities
+cities <- unique(employed_data$city)
+
+# Loop through each city and plot
+for (city in cities) {
+  city_data <- employed_data %>% filter(city == !!city)
+
+  plotly_obj <- plot_ly(data = city_data, x = ~date, y = ~workers.geih, 
+                        color = I("black"),  
+                        type = 'scatter', mode = 'lines+markers',
+                        text = ~city, hoverinfo = 'text+x+y') %>%
+    layout(title = paste("Total Number of Workers Over Time in", city, "from 2016 to 2019"),
+           xaxis = list(title = "Year"),
+           yaxis = list(title = "Number of Workers"), 
+           legend = list(orientation = "v", x = 1.05, y = 1))
+  
+  # Display the interactive plot
+  print(plotly_obj)
+}
+```
+
+Let's proceed to work on the prediction for the city of BUCARAMANGA A.M.
+```{r}
+bucaramanga_dataset <- employed_data %>%
+  filter( employed_data$city == "BUCARAMANGA A.M.") %>%
+  select(-city, -eco_activity, -Category.sfp, -lat.ll, -lat_z.ll, -lng.ll, -lng_z.ll)
+bucaramanga_dataset
+```
+Let's see again how does our variable of interest looks like: 
+```{r}
+bucaramanga_dataset$date <- as.Date(paste0(bucaramanga_dataset$date, "-01"), format = "%Y-%m-%d")
+plot(bucaramanga_dataset$date, bucaramanga_dataset$workers.geih, type='l', main='Evolution of workers during 2016-12 and 2019-12', xlab='Date', ylab='Number of Workers')
+```
+There appears to be an upward trend to employed workers, with some peaks and valleys through out our time span. As a trial, let's just try to fit an OLS model with the variables we have at the moment.
+
+```{r}
+# Basic OLS model fitting
+buc_basic_ols <- lm(workers.geih ~ . - date, data = bucaramanga_dataset)
+summary(buc_basic_ols)
+
+# Check for multicollinearity
+vif(buc_basic_ols)
+```
+Right now we have too many variables and too few observation points, which is causing an over fitting of the model. Let's select what we suspect are the most important variables from each of our datasets and reduce the number of variables that way. 
+```{r}
+selected_variables <- c("workers.geih","date", "year", "month", "population_month.pop", "population_year.pop", "CPI.cpi", "CPI_month_var.cpi", "Enrollment_Rate_5_16.edu", "Net_Coverage.edu", "Pass_Rate.edu", "I_PM.mp", "I_PME.mp", "Gini.mp", "IPUG.mp", "LP.mp", "LPE.mp", "MDM_Resource_Mobilization.ci", "MDM_Execution_Of_Resources.ci", "MDM_Open_Government_And_Transparency.ci", "MDM_Territorial_Ordering.ci", "MDM_Education.ci", "MDM_Health_Coverage.ci", "MDM_Services.ci", "MDM_Security_And_Coexistence.ci", "TotalIncome.fp", "TotalExpenses.fp", "Self_financing_of_operating_expenses.sfp", "Debt_service_support.sfp", "Dependence_on_transfers_from_the_Nation_and_Royalties.sfp", "Generation_of_Own_Resources.sfp", "Magnitude_of_Investment.sfp", "Saving_Capacity.sfp", "Fiscal_Performance_Indicator.sfp")
+
+# Subset the dataframe using the vector of selected variables
+bucaramanga_dataset_subset <- bucaramanga_dataset[, selected_variables]
+
+#Let's run some tests to see what is the distribution of our prediction variable
+hist(bucaramanga_dataset_subset$workers.geih, main = "Histogram of Number of Workers", xlab = "Number of Workers", breaks = "Sturges")
+qqnorm(bucaramanga_dataset_subset$workers.geih)
+qqline(bucaramanga_dataset_subset$workers.geih, col = "red")
+shapiro.test(bucaramanga_dataset_subset$workers.geih)
+summary(bucaramanga_dataset_subset$workers.geih)
+```
+
+Now that we have a smaller subset of variables, let's evaluate the relationship they have to our variable of interest. Let's perform an EDA and test the assumptions necessary for linear regression. 
+
+```{r}
+variables <- c("year", "month", "population_month.pop", "population_year.pop", "CPI.cpi", "CPI_month_var.cpi", "Enrollment_Rate_5_16.edu", "Net_Coverage.edu", "Pass_Rate.edu", "I_PM.mp", "I_PME.mp", "Gini.mp", "IPUG.mp", "LP.mp", "LPE.mp", "MDM_Resource_Mobilization.ci", "MDM_Execution_Of_Resources.ci", "MDM_Open_Government_And_Transparency.ci", "MDM_Territorial_Ordering.ci", "MDM_Education.ci", "MDM_Health_Coverage.ci", "MDM_Services.ci", "MDM_Security_And_Coexistence.ci", "TotalIncome.fp", "TotalExpenses.fp", "Self_financing_of_operating_expenses.sfp", "Debt_service_support.sfp", "Dependence_on_transfers_from_the_Nation_and_Royalties.sfp", "Generation_of_Own_Resources.sfp", "Magnitude_of_Investment.sfp", "Saving_Capacity.sfp", "Fiscal_Performance_Indicator.sfp")
+
+for (variable in variables) {
+  # Fit a linear model for each variable
+  formula <- as.formula(paste("workers.geih ~", variable))
+  model <- lm(formula, data = bucaramanga_dataset_subset)
+  
+  # Calculate R-squared value
+  r_squared <- summary(model)$r.squared
+  
+  # Create the plot
+  g <- ggplot(bucaramanga_dataset_subset, aes_string(x = variable, y = "workers.geih")) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE, color = "blue") +
+    labs(title = paste("Relationship between", variable, "and Number of Workers"),
+         subtitle = paste("R-squared =", round(r_squared, 3)),
+         x = variable, y = "Number of Workers") +
+    theme_minimal()
+  
+  # Print the plot
+  print(g)
+}
+
+```
+Seeing these plots we can see what sort of relationship our variables have with our predictor, but we need to do more testing if we want to fit these into prediction models. Let's now proceed to test the assumptions necessary for linear regression (linearity, Normality, Homoscedasticity, Independence, Multicollinearity)
+
+```{r}
+#First, let's split the data into training and testing
+bucaramanga_dataset_subset$date <- as.Date(paste0(bucaramanga_dataset_subset$date, "-01"), format = "%Y-%m-%d")
+train_data_buc <- bucaramanga_dataset_subset[bucaramanga_dataset_subset$date < as.Date("2019-07-01"), ]
+test_data_buc <- bucaramanga_dataset_subset[bucaramanga_dataset_subset$date >= as.Date("2019-07-01"), ]
+
+#let's fit a model
+model_buc <- lm(workers.geih ~ . - date, data = train_data_buc)
+
+# Summarize the model to look at coefficients
+summary(model_buc)
+
+```
+We have too many variables right now for out model, even though it is statistically significant (p value < 0.05), the high R-square of 0.9814 suggest some sort of over-fitting. Let's do a stepwise regression for our model, in which we can automatically select the most important variables for this model. 
+
+```{r}
+model_buc <- lm(workers.geih ~ . - date, data = train_data_buc)
+stepwise_model_buc <- step(model_buc, direction = "both", trace = FALSE)
+
+# Print the summary of the final model
+summary(stepwise_model_buc)
+```
+Let's evaluate how this model performed.
+```{r}
+# Predicting with the stepwise model
+test_data_buc$predicted_workers <- predict(stepwise_model_buc, newdata = test_data_buc)
+
+# Find the full range of values for workers including both actual values and predictions
+full_range <- range(c(bucaramanga_dataset_subset$workers.geih, quantile(test_data_buc$predicted_workers,0.25)))
+
+# Plot the actual data with the adjusted y limits
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black',
+     xlab='Date', ylab='Number of Workers', xlim=range(bucaramanga_dataset_subset$date), ylim=full_range, 
+     main='Evolution of workers during 2016-12 and 2019-12')
+
+# Add the OLS predictions to the plot
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red')
+
+# Add the legend
+legend("topleft", legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)"),
+       col=c("black", "red"), lty=1, cex=0.8)
+```
+Visually we can see that the model is not predicting correctly, let's run the OLS Assumption test to identify what type of changes we would have to apply to our data.
+
+```{r}
+# Normality - Shapiro-Wilk normality test on model residuals
+shapiro.test(resid(stepwise_model_buc))
+
+# Homoscedasticity - Plot residuals vs. fitted values
+plot(fitted(stepwise_model_buc), resid(stepwise_model_buc), xlab = "Fitted Values", ylab = "Residuals")
+abline(h = 0, col = "red")
+
+# Independence - Durbin-Watson test for autocorrelation
+dwtest(stepwise_model_buc)
+
+# Multicollinearity - Variance Inflation Factor for multicollinearity
+vif(stepwise_model_buc)  # VIF > 5 or 10 might be problematic
+
+# Performance metrics
+mae <- mean(abs(test_data_buc$predicted_workers - test_data_buc$workers.geih))
+rmse <- sqrt(mean((test_data_buc$predicted_workers - test_data_buc$workers.geih)^2))
+
+# Print performance metrics
+cat("MAE:", mae, "\n")
+cat("RMSE:", rmse, "\n")
+
+```
+What do these results mean for our OLS model assumptions?
+*Normality Test (Shapiro-Wilk)*
+W = 0.9157, p-value = 0.01819: The p-value is smaller than 0.05, so we reject the null hypothesis of normality. This indicates that the residuals of the model may be not considered normally distributed, which doesn't satisfy done of the OLS assumptions.
+*Homoscedasticity (Plot of Residuals vs. Fitted Values)*
+The residuals plot shows a random dispersion of points around the horizontal line at zero, which suggests that there might not be any obvious problems with homoscedasticity. Nevertheless, it is important to note the potential clustering of data points around the center. 
+
+*Independence (Durbin-Watson test)*
+DW = 2.732, p-value = 0.1383: A Durbin-Watson statistic close to 2 suggests that there is no autocorrelation in the residuals, which meets the assumption of independence. However, the p-value here is above 0.05, indicating there is no significant evidence of autocorrelation. 
+*Multicollinearity (VIF)*
+The reported VIF values are high, indicating potential multicollinearity among the predictors. Particularly, variables with VIF scores in the hundreds or thousands far exceed common thresholds of 5 or 10, suggesting that multicollinearity might be inflating the variances of the parameter estimates and could be problematic for the model.
+*Prediction Performance (MAE and RMSE)*
+MAE: 386166.8  and RMSE: 599713.9  suggest that the model's predictions deviate from the actual values by a large margin. Lower values of MAE and RMSE would indicate better predictive accuracy. The large values here indicate the model may not predict the target variable very well.
+
+Before changing to another model that can better handle the type of data we have, let's try to remove the variables that are not statistically significant to the model and predict again to see if there is in fact some change in our prediction. 
+
+```{r}
+coef_summary <- summary(stepwise_model_buc)$coefficients
+
+# Extract names of statistically significant variables (p-value < 0.05)
+significant_vars <- rownames(coef_summary)[coef_summary[, "Pr(>|t|)"] < 0.05]
+
+# Create the formula for the new model with significant variables only
+# Remove the '(Intercept)' term because it will be automatically included
+significant_formula <- as.formula(paste("workers.geih ~", paste(significant_vars[significant_vars != "(Intercept)"], collapse = " + ")))
+
+# Fit the new model with significant variables only
+stepwise_model_buc_sig <- lm(significant_formula, data = train_data_buc)
+
+# Summary of the new model
+summary(stepwise_model_buc_sig)
+
+```
+```{r}
+# Predicting with the stepwise model
+test_data_buc$predicted_workers_sig <- predict(stepwise_model_buc_sig, newdata = test_data_buc)
+
+# Find the full range of values for workers including both actual values and predictions
+full_range <- range(c(bucaramanga_dataset_subset$workers.geih, mean(test_data_buc$predicted_workers)))
+
+# Plot the actual data for the complete dataset
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black', xlab='Date', ylab='Number of Workers', ylim=full_range)
+
+# Add the forecasted data starting from the prediction date
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red')
+
+# Add the forecasted data starting from the prediction date
+lines(test_data_buc$date, test_data_buc$predicted_workers_sig, col='gold')
+
+# Add a legend to the plot
+legend("topleft", legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", "OLS Prediction (2019-07 onward) Sig. Variables"),
+       col=c("black", "red", "gold"), lty=1, cex=0.8)
+
+
+# Ensure the plot has the correct limits
+xlim <- range(bucaramanga_dataset_subset$date)
+ylim <- range(c(bucaramanga_dataset_subset$workers.geih, test_data_buc$predicted_workers, test_data_buc$predicted_workers_sig))
+
+```
+
+
+```{r}
+# Normality - Shapiro-Wilk normality test on model residuals
+shapiro.test(resid(stepwise_model_buc_sig))
+
+# Homoscedasticity - Plot residuals vs. fitted values
+plot(fitted(stepwise_model_buc_sig), resid(stepwise_model_buc_sig), xlab = "Fitted Values", ylab = "Residuals")
+abline(h = 0, col = "red")
+
+# Independence - Durbin-Watson test for autocorrelation
+dwtest(stepwise_model_buc_sig)
+
+# Multicollinearity - Variance Inflation Factor for multicollinearity
+vif(stepwise_model_buc_sig)  # VIF > 5 or 10 might be problematic
+
+# Performance metrics
+mae <- mean(abs(test_data_buc$predicted_workers - test_data_buc$workers.geih))
+rmse <- sqrt(mean((test_data_buc$predicted_workers - test_data_buc$workers.geih)^2))
+
+# Print performance metrics
+cat("MAE:", mae, "\n")
+cat("RMSE:", rmse, "\n")
+
+# Performance metrics significant variables
+mae_sig <- mean(abs(test_data_buc$predicted_workers_sig - test_data_buc$workers.geih))
+rmse_sig <- sqrt(mean((test_data_buc$predicted_workers_sig - test_data_buc$workers.geih)^2))
+
+# Print performance metrics significant variables
+cat("MAE significant variables:", mae_sig, "\n")
+cat("RMSE significant variables:", rmse_sig, "\n")
+```
+Even though the MAE and RMSE Result show an improvement, we can visually see that the model is not effectively predicting our workers variable. We are going to analyze another more robust prediction models that might capture better the behavior of our variables and could produce more trustworthy predictions. In this case we are going to analyze ARIMA, SARIMA, and Random Forrest models. 
+
+Let's start with an ARIMA model, which stands for  *A*utoreg*r*essive *I*ntegrated *M*oving *A*verage. This is a class of satistical model used for analyzing and forecasting time series data. It has 3 main components:
+1) AR(Autoregressive) - p : Involves using the past values of the time series to predict the future values.
+2) I (Integrated) - d: Represents the order of differencing required to make the time series stationary.
+3) MA (Moving Average) - q: Involces using the dependency between an observation and a residual error from a moving average model applied to lagged observations. 
+
+First we need to make sure that our target variable is stationary.
+```{r}
+# Convert the workers data into a time series object, assuming monthly data frequency
+workers_ts <- ts(train_data_buc$workers.geih, frequency = 12)
+
+# Perform the Augmented Dickey-Fuller test
+adf.test(workers_ts, alternative = "stationary")
+```
+The Augmented Dickey-Fuller (ADF) test is used to test the null hypothesis that a unit root is present in a time series sample. A unit root would indicate that the time series is non-stationary, meaning its statistical properties change over time. In this case, since our p-value (0.01493) is smaller than the alpha level of 0.05, we have enough evidence to reject the null hypothesis, which implies that the time series may be stationary. 
+
+
+```{r}
+# ACF and PACF plots to help identify model parameters
+acf(workers_ts)
+pacf(workers_ts)
+
+# Fitting an ARIMA model based on identified parameters
+arima_model <- auto.arima(workers_ts, seasonal = FALSE, d=0) #Letting auto.arima find the best predictors
+arima_model_d<- auto.arima(workers_ts, seasonal = FALSE) #setting the order of first-differencing to 1 to see if this makes a difference
+
+summary(arima_model)
+print("")
+summary(arima_model_d)
+```
+*ACF*: The ACF plot shows the autocorrelation of the series with its lags. Ideally, for a time series that has no autocorrelation, we would expect to see the plot drop to near-zero quickly. In this case the ACF plot shows that most of the autocorrelations are within the confidence interval (the blue dotted lines) only after the fourth lag, which is an indication that there may not be significant autocorrelation in the differenced series.
+
+*PACF*: Here, we see that most PACF values are within the confidence bounds, suggesting that the AR terms might not be necessary, or if they are, they are likely to be of low order.
+
+```{r}
+# Generate a sequence of dates for forecasting that aligns with the test set
+arima_forecast_dates <- seq(from = as.Date("2019-07-01"), 
+                            by = "month", 
+                            length.out = length(test_data_buc$date))
+
+# Forecasting
+forecasts <- forecast(arima_model, h = length(test_data_buc$workers.geih))
+forecasts_d <- forecast(arima_model_d, h= length(test_data_buc$workers.geih))
+
+# Define the time series plot range
+time_range <- range(bucaramanga_dataset_subset$date)
+
+# Define the y-axis plot range to include all data
+workers_range <- range(bucaramanga_dataset_subset$workers.geih, quantile(test_data_buc$predicted_workers,0.25), test_data_buc$predicted_workers_sig, forecasts$lower[,2], forecasts$upper[,2])
+
+# Plot the actual data for the complete dataset
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black', 
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BUCARAMANGA A.M.")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue')
+
+#ARIMA d=1 forecast line
+lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet')
+
+# OLS forecasted data
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red')
+lines(test_data_buc$date, test_data_buc$predicted_workers_sig, col='gold')
+
+# Legend with confidence intervals
+par(xpd=TRUE) # Allow things to be drawn outside the plot region
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast", "ARIMA Forecast d=1",
+                "80% Confidence", "95% Confidence"), 
+       col=c("black", "red", "gold", "blue","darkviolet",  NA, NA), 
+       lty=c(NA, NA, NA, NA, NA,NA, NA), 
+       lwd=c(5, 1.5, 1.5, 1.5,1.5, NA, NA), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue","darkviolet",
+              rgb(0.5, 0.5, 0.5, alpha=0.5), rgb(0.8, 0.8, 0.8, alpha=0.3)),
+       bty="n") 
+par(xpd=FALSE) # Turn off drawing outside plot region
+
+#Evaluate the predictive performance of the ARIMA Model against the observed data
+# Calculate MAE and RMSE
+mae_arima <- mean(abs(test_data_buc$workers.geih - forecasts$mean))
+rmse_arima <- sqrt(mean((test_data_buc$workers.geih - forecasts$mean)^2))
+
+# Print the results
+cat("ARIMA Model MAE:", mae_arima, "\n")
+cat("ARIMA Model RMSE:", rmse_arima, "\n")
+
+# If you also want to include a summary of the forecast object
+summary(forecasts)
+summary(forecasts_d)
+```
+We can visually confirm that the ARIMA model is predicting the variables better than the prior 2 models but the ARIMA model with the d argument manually set to 1 is almost producing a straigh line. Let's proceed to store the evaluation results of each to be able to better compare them at the end.
+```{r}
+# Initialize an empty data frame to store the model summary statistics
+model_summaries <- data.frame(
+  Model = character(),
+  MAE = numeric(),
+  RMSE = numeric(),
+  R_Squared = numeric(),
+  P_Value = numeric(),
+  Residual_SE = numeric(),
+  AIC = numeric(),
+  AICc = numeric(),
+  BIC = numeric(),
+  stringsAsFactors = FALSE
+)
+# Calculate metrics for OLS model
+ols_mae <- mean(abs(test_data_buc$predicted_workers - test_data_buc$workers.geih))
+ols_rmse <- sqrt(mean((test_data_buc$predicted_workers - test_data_buc$workers.geih)^2))
+ols_summary <- summary(stepwise_model_buc)
+
+# Add OLS model metrics to the data frame
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "OLS",
+  MAE = ols_mae,
+  RMSE = ols_rmse,
+  R_Squared = ols_summary$r.squared,
+  P_Value = 8.951e-07, # Manually get it
+  Residual_SE = ols_summary$sigma,
+  AIC = AIC(stepwise_model_buc),
+  AICc = AIC(stepwise_model_buc) + (2 * length(coef(stepwise_model_buc)) * (length(coef(stepwise_model_buc)) + 1)) / (length(resid(stepwise_model_buc)) - length(coef(stepwise_model_buc)) - 1),
+  BIC = BIC(stepwise_model_buc)
+))
+
+# Calculate metrics for the OLS model with significant variables
+sig_ols_mae <- mean(abs(test_data_buc$predicted_workers_sig - test_data_buc$workers.geih))
+sig_ols_rmse <- sqrt(mean((test_data_buc$predicted_workers_sig - test_data_buc$workers.geih)^2))
+sig_ols_summary <- summary(stepwise_model_buc_sig)
+
+# Add OLS model with significant variables metrics to the data frame
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "OLS (Significant Variables)",
+  MAE = sig_ols_mae,
+  RMSE = sig_ols_rmse,
+  R_Squared = sig_ols_summary$r.squared,
+  P_Value = 1.124e-08, # Manually get it
+  Residual_SE = sig_ols_summary$sigma,
+  AIC = AIC(stepwise_model_buc_sig),
+  AICc = AIC(stepwise_model_buc_sig) + (2 * length(coef(stepwise_model_buc_sig)) * (length(coef(stepwise_model_buc_sig)) + 1)) / (length(resid(stepwise_model_buc_sig)) - length(coef(stepwise_model_buc_sig)) - 1),
+  BIC = BIC(stepwise_model_buc_sig)
+))
+
+# Calculate metrics for ARIMA model
+arima_mae <- mean(abs(test_data_buc$workers.geih - forecasts$mean))
+arima_rmse <- sqrt(mean((test_data_buc$workers.geih - forecasts$mean)^2))
+arima_summary <- summary(arima_model)
+
+# Add ARIMA model metrics to the data frame
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "ARIMA",
+  MAE = arima_mae,
+  RMSE = arima_rmse,
+  R_Squared = NA, # ARIMA models do not have R-squared
+  P_Value = NA,   # P-value usually not directly applicable to ARIMA models
+  Residual_SE = arima_summary$sigma^2,
+  AIC = arima_summary$aic,
+  AICc = arima_summary$aicc,
+  BIC = arima_summary$bic
+))
+
+# Calculate metrics for ARIMA model
+arima_d_mae <- mean(abs(test_data_buc$workers.geih - forecasts_d$mean))
+arima_d_rmse <- sqrt(mean((test_data_buc$workers.geih - forecasts_d$mean)^2))
+arima_d_summary <- summary(arima_model_d)
+
+# Add ARIMA model metrics to the data frame
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "ARIMA with d=1",
+  MAE = arima_d_mae,
+  RMSE = arima_d_rmse,
+  R_Squared = NA, # ARIMA models do not have R-squared
+  P_Value = NA,   # P-value usually not directly applicable to ARIMA models
+  Residual_SE = arima_d_summary$sigma^2,
+  AIC = arima_d_summary$aic,
+  AICc = arima_d_summary$aicc,
+  BIC = arima_d_summary$bic
+))
+
+# Print the model summaries data frame
+print(model_summaries)
+
+```
+As we can see, the ARIMA models have somewhat of a better performance than the previous models, but they are still not the most optimal ones. Let's see how the residuals of our auto ARIMA prediction, as well as our ACF and PACF plots look like in order to determine our next steps.
+
+```{r Residual and ACF / PACF Analysis of ARIMA}
+# Calculate residuals
+residuals <- test_data_buc$workers.geih - forecasts$mean
+
+# Calculate Mean Squared Error (MSE)
+mse <- mean(residuals^2)
+
+# Calculate Residual Standard Error (RSE)
+rse <- sqrt(mse)
+
+# Print the RSE
+print(rse)
+
+# Plotting residuals
+plot(residuals, type = 'o', col = 'red', main = "Residuals of ARIMA Model", xlab = "Index", ylab = "Residuals")
+abline(h = 0, col = 'blue')
+
+
+# Calculate residuals
+residuals_arima <- residuals(arima_model)
+
+# ACF and PACF plots
+acf(residuals_arima, main='ACF of ARIMA Residuals')
+pacf(residuals_arima, main='PACF of ARIMA Residuals')
+
+```
+Here is what we can conclude from each of the previous plots, and what they are evaluating:
+*Residuals*: Use to visually assess the randomness and distribution of the residuals in our prediction. The plot of the residuals of the ARIMA model appears to exhibit some pattern, as indicated by the trend upwards. This suggests that the model may not be fully capturing the underlying data structure, which might be due to seasonality or another form of autocorrelation not addressed by the model.
+*ACF*: Used to show the correlation of the time series with its own lagged values.  It shows that most of the autocorrelations for various lags are within the blue confidence limits, which suggests that there is little autocorrelation remaining in the residuals. However, there are a couple of lags that exceed the confidence bounds, which indicates that some autocorrelation may still be present.
+*PACF*: Used for identifying the number of AR (Autoregressive) terms. There are a few lags with significant partial autocorrelations, suggesting that the ARIMA model could potentially benefit from including additional AR terms to better capture the data structure.
+
+These results are promising. Let's continue now with a SARIMA model, in order to better capture the seasonal component of our data.
+
+```{r SARIMA model Fitting}
+# Identify potential SARIMA parameters using auto.arima with seasonal = TRUE
+sarima_model <- auto.arima(workers_ts, seasonal = TRUE)
+
+# Summary of the SARIMA model
+summary(sarima_model)
+
+# Forecasting with SARIMA model
+sarima_forecasts <- forecast(sarima_model, h = length(test_data_buc$workers.geih))
+```
+Let's visualize this result with our other models to see how it is behaving. 
+```{r visualizing models with confidence intervals}
+# Plot the actual data for the complete dataset
+
+workers_range <- range(bucaramanga_dataset_subset$workers.geih)
+
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, 
+     main="Forecasts Comparison for Employed Workers in BUCARAMANGA A.M.")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
+
+# SARIMA forecast line
+sarima_forecast_dates <- seq(from = min(test_data_buc$date), 
+                             by = "month", 
+                             length.out = length(sarima_forecasts$mean))
+
+lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
+
+# OLS forecasted data
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red', lwd=1.8)
+lines(test_data_buc$date, test_data_buc$predicted_workers_sig, col='gold', lwd=1.8)
+
+# Update the legend with SARIMA
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast", 
+                "SARIMA Forecast", "80% Confidence", "95% Confidence"), 
+       col=c("black", "red", "gold", "blue", "green", NA, NA), 
+       lty=c(1, 1, 1, 1, 1, NA, NA), 
+       lwd=c(2, 2, 2, 2, 2, NA, NA), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue", "green", 
+              rgb(0.5, 0.5, 0.5, alpha=0.5), rgb(0.8, 0.8, 0.8, alpha=0.3)),
+       bty="n") 
+par(xpd=FALSE) # Turn off drawing outside plot region
+```
+
+```{r visualizing models}
+# Plot the actual data for the complete dataset
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BUCARAMANGA A.M.")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
+
+#ARIMA d=1 forecast line
+lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
+
+# SARIMA forecast line
+sarima_forecast_dates <- seq(from = min(test_data_buc$date), 
+                             by = "month", 
+                             length.out = length(sarima_forecasts$mean))
+lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
+
+# OLS forecasted data
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red', lwd=1.8)
+lines(test_data_buc$date, test_data_buc$predicted_workers_sig, col='gold', lwd=1.8)
+
+# Add a vertical line for the last day of the training data
+abline(v = as.numeric(min(test_data_buc$date)), col="black", lwd=1.8, lty=2)
+
+# Update the legend with SARIMA
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=1 Forecast", 
+                "SARIMA Forecast"), 
+       col=c("black", "red", "gold", "blue", "darkviolet","green"), 
+       lty=c(1, 1, 1, 1, 1, 1), 
+       lwd=c(2, 2, 2, 2, 2, 2), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue", "darkviolet","green"),
+       bty="n") 
+par(xpd=TRUE) # Turn off drawing outside plot region
+```
+Let's add the results of the SARIMA Model to our results dataset to be able to compare it with the other models we have so far.
+
+```{r}
+# Calculate metrics for SARIMA model
+sarima_mae <- mean(abs(test_data_buc$workers.geih - sarima_forecasts$mean))
+sarima_rmse <- sqrt(mean((test_data_buc$workers.geih - sarima_forecasts$mean)^2))
+sarima_summary <- summary(sarima_model)
+
+# Add SARIMA model metrics to the data frame
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "SARIMA",
+  MAE = sarima_mae,
+  RMSE = sarima_rmse,
+  R_Squared = NA, # SARIMA models do not have R-squared
+  P_Value = NA,   # P-value usually not directly applicable to SARIMA models
+  Residual_SE = sarima_summary$sigma^2,
+  AIC = sarima_summary$aic,
+  AICc = sarima_summary$aicc,
+  BIC = sarima_summary$bic
+))
+
+# Print the model summaries data frame
+print(model_summaries)
+```
+The SARIMA model gave the same results as the initial ARIMA prediction. Let's see if we can obtain better results fitting a Random Forrest Model to see if it can outperform the models we have so far.
+```{r Random forrest}
+# Load data
+data_rf <- bucaramanga_dataset_subset
+
+# Ensure date is in the correct format
+data_rf$date <- as.Date(data_rf$date)
+
+# Split into training and testing based on date
+split_date <- as.Date("2019-07-01")
+train_data_rf <- data_rf[data_rf$date < split_date, ]
+test_data_rf <- data_rf[data_rf$date >= split_date, ]
+
+# Preserve 'date' for plotting before removing non-numeric variables
+train_dates <- train_data_rf$date
+test_dates <- test_data_rf$date
+
+# Remove non-numeric columns for model training (except 'date' for plotting)
+numeric_columns <- sapply(train_data_rf, is.numeric)
+train_data_rf <- train_data_rf[, numeric_columns]
+test_data_rf <- test_data_rf[, numeric_columns]
+
+# Remove constant columns
+train_data_rf <- train_data_rf[, sapply(train_data_rf, function(x) length(unique(x)) > 1)]
+test_data_rf <- test_data_rf[, names(train_data_rf)]  # Ensure test data has the same columns as train data
+
+# Check for and remove highly correlated variables
+cor_matrix <- cor(train_data_rf, use = "pairwise.complete.obs")
+high_cor <- findCorrelation(cor_matrix, cutoff = 0.70)
+#train_data_rf <- train_data_rf[, -high_cor]
+#test_data_rf <- test_data_rf[, names(train_data_rf)]
+
+# Train Random Forest model
+rf_model <- randomForest(workers.geih ~ ., data = train_data_rf, ntree = 500)
+
+# Predict on test set
+predictions_rf <- predict(rf_model, test_data_rf)
+
+# Calculate MAE and RMSE
+MAE <- mean(abs(predictions_rf - test_data_rf$workers.geih))
+RMSE <- sqrt(mean((predictions_rf - test_data_rf$workers.geih)^2))
+
+# Plotting actual vs predicted using preserved date columns
+plot(test_dates, test_data_rf$workers.geih, type = 'l', col = 'blue', xlab = 'Date', ylab = 'Number of Workers', main = "RF Model Predictions")
+lines(test_dates, predictions_rf, col = 'red')
+legend("topright", legend=c("Actual", "Predicted"), col=c("blue", "red"), lty=1, cex=0.8)
+
+# Print performance metrics
+print(paste("MAE:", MAE))
+print(paste("RMSE:", RMSE))
+
+# Model diagnostics could involve examining residuals etc.
+residuals <- test_data_rf$workers.geih - predictions_rf
+plot(test_dates, residuals, type = 'l', main = "Residuals of Predictions", xlab = "Date", ylab = "Residuals")
+abline(h = 0, col = "red")
+
+# Feature importance
+importance <- importance(rf_model)
+barplot(importance, main="Feature Importance in Random Forest Model", horiz=TRUE, las=1)
+
+```
+
+```{r visualizing model results}
+# Plot the actual data for the complete dataset
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BUCARAMANGA A.M.")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
+
+# ARIMA d=1 forecast line
+lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
+
+# SARIMA forecast line
+sarima_forecast_dates <- seq(from = min(test_data_buc$date), 
+                             by = "month", 
+                             length.out = length(sarima_forecasts$mean))
+lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
+
+# OLS forecasted data
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red', lwd=1.8)
+lines(test_data_buc$date, test_data_buc$predicted_workers_sig, col='gold', lwd=1.8)
+
+# Random Forest model predictions
+lines(test_dates, predictions_rf, col='orange', lwd=1.8)
+
+# Add a vertical line for the last day of the training data
+abline(v = as.numeric(min(test_data_buc$date)), col="black", lwd=1.8, lty=2)
+
+# Update the legend with Random Forest
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=1 Forecast", 
+                "SARIMA Forecast", "Random Forest Prediction"), 
+       col=c("black", "red", "gold", "blue", "darkviolet", "green", "orange"), 
+       lty=c(1, 1, 1, 1, 1, 1, 1), 
+       lwd=c(2, 2, 2, 2, 2, 2, 2), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue", "darkviolet", "green", "orange"),
+       bty="n") 
+par(xpd=TRUE) # Turn off drawing outside plot region
+```
+
+```{r}
+# Calculate MAE and RMSE for Random Forest
+predictions_rf <- predict(rf_model, newdata = test_data_rf)
+MAE_rf <- mean(abs(predictions_rf - test_data_rf$workers.geih))
+RMSE_rf <- sqrt(mean((predictions_rf - test_data_rf$workers.geih)^2))
+
+# Calculate pseudo R-squared for Random Forest
+SST_rf <- sum((test_data_rf$workers.geih - mean(train_data_rf$workers.geih))^2)
+SSR_rf <- sum((predictions_rf - test_data_rf$workers.geih)^2)
+R_squared_rf <- 1 - SSR_rf/SST_rf
+
+# Calculate Residual Standard Error for Random Forest
+residuals_rf <- test_data_rf$workers.geih - predictions_rf
+Residual_SE_rf <- sd(residuals_rf)
+
+# Add Random Forest model metrics to the model_summaries dataframe
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "Random Forest",
+  MAE = MAE_rf,
+  RMSE = RMSE_rf,
+  R_Squared = R_squared_rf,
+  P_Value = NA,   # Not applicable to Random Forest
+  Residual_SE = Residual_SE_rf,
+  AIC = NA,       # Not applicable to Random Forest
+  AICc = NA,      # Not applicable to Random Forest
+  BIC = NA        # Not applicable to Random Forest
+))
+
+# Print the updated model summaries data frame
+print(model_summaries)
+```
+
+```{r visualize the feature importance in the random forest model}
+# Get the names of features used in the model (excluding the response variable)
+feature_names <- setdiff(colnames(train_data_rf), "workers.geih")
+
+# Assuming 'importance' is a matrix with variable names as row names and 'IncNodePurity' as a column:
+barplot(importance[, "IncNodePurity"], 
+        horiz = TRUE, 
+        main = "Feature Importance in Random Forest Model",
+        las = 1,
+        cex.names = 0.5) # Adjust text size to ensure it fits
+
+
+```
+
+```{r Optimized Random Forest}
+# Set seed for reproducibility
+set.seed(123)
+
+# Create a control function for repeated cross-validation
+control <- trainControl(
+  method="repeatedcv", 
+  number=10, 
+  repeats=3, 
+  search="random",
+  summaryFunction=defaultSummary  # Using RMSE and R-squared
+)
+
+# Set up a tuning grid
+tuneGrid <- expand.grid(
+  mtry = c(2, floor(sqrt(ncol(train_data_rf))), floor(ncol(train_data_rf)/3)),
+  splitrule = "variance",
+  min.node.size = c(1, 5, 10)
+)
+
+# Train the Random Forest model focusing on RMSE
+rf_model_rmse <- train(
+  workers.geih ~ ., 
+  data = train_data_rf, 
+  method = "ranger", 
+  trControl = control,
+  tuneLength = 10,
+  metric = "RMSE",
+  importance = 'impurity' # This tells ranger to calculate variable importance
+)
+
+# Train the Random Forest model focusing on R-squared
+rf_model_rsquared <- train(
+  workers.geih ~ ., 
+  data = train_data_rf, 
+  method = "ranger", 
+  trControl = control,
+  tuneLength = 10,
+  metric = "Rsquared",
+  importance = 'impurity' # This tells ranger to calculate variable importance
+)
+
+# Predict on the test set for both models
+predictions_rmse <- predict(rf_model_rmse, newdata = test_data_rf)
+predictions_rsquared <- predict(rf_model_rsquared, newdata = test_data_rf)
+
+# Calculate residuals for both models
+residuals_rmse <- test_data_rf$workers.geih - predictions_rmse
+residuals_rsquared <- test_data_rf$workers.geih - predictions_rsquared
+
+# Calculate MAE and RMSE for both models
+MAE_rmse <- mean(abs(residuals_rmse))
+RMSE_rmse <- sqrt(mean(residuals_rmse^2))
+MAE_rsquared <- mean(abs(residuals_rsquared))
+RMSE_rsquared <- sqrt(mean(residuals_rsquared^2))
+
+# Calculate Residual Standard Error for both models
+Residual_SE_rmse <- sd(residuals_rmse)
+Residual_SE_rsquared <- sd(residuals_rsquared)
+
+# Compute R-squared using the total sum of squares (SST)
+SST <- sum((test_data_rf$workers.geih - mean(train_data_rf$workers.geih))^2)
+R_squared_rmse <- 1 - sum(residuals_rmse^2) / SST
+R_squared_rsquared <- 1 - sum(residuals_rsquared^2) / SST
+
+# Add the best performing models based on RMSE and R-squared to the model summaries dataframe
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "RF Best RMSE",
+  MAE = MAE_rmse,
+  RMSE = RMSE_rmse,
+  R_Squared = R_squared_rmse,
+  P_Value = NA,
+  Residual_SE = Residual_SE_rmse,
+  AIC = NA,
+  AICc = NA,
+  BIC = NA
+))
+
+model_summaries <- rbind(model_summaries, data.frame(
+  Model = "RF Best R_Squared",
+  MAE = MAE_rsquared,
+  RMSE = RMSE_rsquared,
+  R_Squared = R_squared_rsquared,
+  P_Value = NA,
+  Residual_SE = Residual_SE_rsquared,
+  AIC = NA,
+  AICc = NA,
+  BIC = NA
+))
+
+# Print the updated model summaries data frame
+print(model_summaries)
+
+# Print the performance metrics
+print(paste("Best RMSE Model - MAE:", MAE_rmse, "RMSE:", RMSE_rmse, "R-squared:", R_squared_rmse))
+print(paste("Best R-squared Model - MAE:", MAE_rsquared, "RMSE:", RMSE_rsquared, "R-squared:", R_squared_rsquared))
+```
+
+```{r}
+# Plot the actual data for the complete dataset
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BUCARAMANGA A.M.")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
+
+# ARIMA d=1 forecast line
+lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
+
+# SARIMA forecast line
+sarima_forecast_dates <- seq(from = min(test_data_buc$date), 
+                             by = "month", 
+                             length.out = length(sarima_forecasts$mean))
+lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
+
+# OLS forecasted data
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red', lwd=1.8)
+lines(test_data_buc$date, test_data_buc$predicted_workers_sig, col='gold', lwd=1.8)
+
+# Random Forest model predictions
+lines(test_dates, predictions_rf, col='orange', lwd=1.8)
+
+# Random Forest model predictions optimized for RMSE
+lines(test_dates, predictions_rmse, col='darkgreen', lwd=1.8, lty=2)
+
+# Random Forest model predictions optimized for R-squared
+lines(test_dates, predictions_rsquared, col='cyan', lwd=1.8, lty=2)
+
+# Add a vertical line for the last day of the training data
+abline(v = as.numeric(min(test_data_buc$date)), col="black", lwd=1.8, lty=2)
+
+# Update the legend with Random Forest predictions
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=2 Forecast", 
+                "SARIMA Forecast", "RF Prediction","RF Prediction (Best RMSE)", "RF Prediction (Best R-squared)"), 
+       col=c("black", "red", "gold", "blue", "darkviolet", "green", "orange", 'darkgreen',"cyan"), 
+       lty=c(1, 1, 1, 1, 1, 1, 1, 2, 2), 
+       lwd=c(2, 2, 2, 2, 2, 2, 2, 2, 2), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue", "darkviolet", "green", "orange", 'darkgreen', "cyan"),
+       bty="n") 
+par(xpd=TRUE) # Allow drawing outside plot region
+```
+
+
+```{r}
+# Get the names of features used in the model (excluding the response variable)
+feature_names <- setdiff(colnames(train_data_rf), "workers.geih")
+
+# Match feature names with importance scores
+if(length(feature_names) == nrow(importance)) {
+  barplot(importance[, "IncNodePurity"], names.arg = feature_names, 
+          main="Feature Importance in Random Forest Model", las=2, cex.names = 1)
+} else {
+  warning("Mismatch in number of features and importance scores.")
+}
+
+```
+
+
+```{r}
+# Helper function to extract variables from a linear model
+extract_lm_vars <- function(model) {
+  return(names(coef(model)))
+}
+
+# Helper function to extract variables from a random forest model
+extract_rf_vars <- function(model) {
+  return(names(model$x))
+}
+
+# Summarizing the variables across all models
+model_var_summary <- list()
+
+# For OLS models
+model_var_summary$OLS <- extract_lm_vars(stepwise_model_buc)
+model_var_summary$OLS_Significant <- extract_lm_vars(stepwise_model_buc_sig)
+
+# For Random Forest
+
+model_var_summary$RandomForest_best_RMSE <- extract_rf_vars(rf_model_rmse)
+model_var_summary$RandomForest_best_R2 <- extract_rf_vars(rf_model_rsquared)
+
+# For ARIMA/SARIMA, list manually included exogenous variables
+# Since ARIMA typically does not use exogenous variables unless specified, it might just be the lags of the time series
+model_var_summary$ARIMA <- "Time Series Lags"
+model_var_summary$SARIMA <- "Time Series Lags + Seasonal Lags"
+
+# Print the summary of variables used by each model
+print(model_var_summary)
+
+# Optionally, convert this list into a more formal dataframe or matrix for reporting
+model_vars_df <- data.frame(
+  Model = names(model_var_summary),
+  Variables = sapply(model_var_summary, paste, collapse = ", "),
+  stringsAsFactors = FALSE
+)
+
+# Print the dataframe
+print(model_vars_df)
+
+```
+
+```{r importance for RF Model}
+# Convert the matrix to a data frame
+importance_df <- as.data.frame(importance)
+
+# Add the feature names as a new column from the row names
+importance_df$Feature <- rownames(importance_df)
+
+# Sort the data frame by importance
+importance_df <- importance_df[order(-importance_df$IncNodePurity), ]
+
+# Select the top N features for clarity
+top_n <- 10
+importance_top_n <- head(importance_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_top_n$IncNodePurity, 
+        main="Feature Importance in Random Forest Model",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_top_n$Feature, xpd = TRUE, cex = 0.75)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+```{r Get RF Models}
+# Extract the ranger model from the caret train object
+ranger_model_rf <- rf_model$finalModel
+ranger_model_rmse <- rf_model_rmse$finalModel
+ranger_model_rsquared <- rf_model_rsquared$finalModel
+
+# Now you can calculate variable importance directly from the ranger model
+importance_rf <- ranger_model_rf$variable.importance
+importance_rmse <- ranger_model_rmse$variable.importance
+importance_rsquared <- ranger_model_rsquared$variable.importance
+
+# The importance is returned as a named vector, you can sort it to see the most important variables
+sorted_importance_rf <- sort(importance_rf, decreasing = TRUE)
+sorted_importance_rmse <- sort(importance_rmse, decreasing = TRUE)
+sorted_importance_rsquared <- sort(importance_rsquared, decreasing = TRUE)
+
+# To view the importance
+print(sorted_importance_rf)
+print("")
+print(sorted_importance_rmse)
+print("")
+print(sorted_importance_rsquared)
+
+```
+
+```{r rf RMSE x}
+# Convert the matrix to a data frame
+importance_r2_df <- as.data.frame(sorted_importance_rmse)
+
+# Add the feature names as a new column from the row names
+importance_r2_df$Feature <- rownames(importance_r2_df)
+
+# Select the top N features for clarity
+top_n <- 10
+importance_r2_top_n <- head(importance_r2_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_r2_top_n$sorted_importance_rmse, 
+        main="Feature Importance in Random Forest Model focused on RMSE",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_r2_top_n$Feature, xpd = TRUE, cex = 0.75)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+
+```{r rf Rsquared x}
+# Convert the matrix to a data frame
+importance_r3_df <- as.data.frame(sorted_importance_rsquared)
+
+# Add the feature names as a new column from the row names
+importance_r3_df$Feature <- rownames(importance_r3_df)
+
+# Select the top N features for clarity
+top_n <- 10
+importance_r3_top_n <- head(importance_r3_df, top_n)
+
+# Increase bottom margin to accommodate angled names
+par(mar=c(7, 4, 4, 2) + 0.1)
+
+# Plot without names
+bp <- barplot(importance_r3_top_n$sorted_importance_rsquared, 
+        main="Feature Importance in Random Forest Model focused on R squared",
+        las=2) 
+
+# Add names at a 45-degree angle
+text(bp, par("usr")[3] - 0.5, srt = 45, adj = 1,
+     labels = importance_r3_top_n$Feature, xpd = TRUE, cex = 0.5)
+
+# Reset the default par settings after plotting
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
+```
+
+```{r export result summaries}
+# Assuming 'df' is your dataframe
+write_xlsx(model_summaries, path = "bucaramanga_results.xlsx")
+
+```
+
+
+```{r export plot}
+# Open a PNG graphics device
+png("bucaramanga_results.png", width=600, height=500)  # Adjust 'width' and 'height' as needed
+
+# Plot the actual data for the complete dataset
+plot(bucaramanga_dataset_subset$date, bucaramanga_dataset_subset$workers.geih, type='l', col='black', lwd=1.8,
+     xlab='Date', ylab='Number of Workers', xlim=time_range, ylim=workers_range, main="Forecasts Comparison for Employed Workers in BUCARAMANGA A.M.")
+
+# ARIMA forecast line
+lines(arima_forecast_dates, forecasts$mean, col='blue', lwd=1.8)
+
+# ARIMA d=1 forecast line
+lines(arima_forecast_dates, forecasts_d$mean, col='darkviolet', lwd=1.8)
+
+# SARIMA forecast line
+sarima_forecast_dates <- seq(from = min(test_data_buc$date), 
+                             by = "month", 
+                             length.out = length(sarima_forecasts$mean))
+lines(sarima_forecast_dates, sarima_forecasts$mean, col='green', lwd=1.8)
+
+# OLS forecasted data
+lines(test_data_buc$date, test_data_buc$predicted_workers, col='red', lwd=1.8)
+lines(test_data_buc$date, test_data_buc$predicted_workers_sig, col='gold', lwd=1.8)
+
+# Random Forest model predictions
+lines(test_dates, predictions_rf, col='orange', lwd=1.8)
+
+# Random Forest model predictions optimized for RMSE
+lines(test_dates, predictions_rmse, col='darkgreen', lwd=1.8, lty=2)
+
+# Random Forest model predictions optimized for R-squared
+lines(test_dates, predictions_rsquared, col='cyan', lwd=1.8, lty=2)
+
+# Add a vertical line for the last day of the training data
+abline(v = as.numeric(min(test_data_buc$date)), col="black", lwd=1.8, lty=2)
+
+# Update the legend with Random Forest predictions
+legend("topleft", inset=c(0, 0), # Negative inset x moves legend to the right
+       legend=c("Actual (2016-2019)", "OLS Prediction (2019-07 onward)", 
+                "OLS Prediction (2019-07 onward) Sig. Variables", "ARIMA Forecast","ARIMA d=2 Forecast", 
+                "SARIMA Forecast", "RF Prediction","RF Prediction (Best RMSE)", "RF Prediction (Best R-squared)"), 
+       col=c("black", "red", "gold", "blue", "darkviolet", "green", "orange", 'darkgreen',"cyan"), 
+       lty=c(1, 1, 1, 1, 1, 1, 1, 2, 2), 
+       lwd=c(2, 2, 2, 2, 2, 2, 2, 2, 2), 
+       merge=TRUE, 
+       cex=0.7, 
+       fill=c("black", "red", "gold", "blue", "darkviolet", "green", "orange", 'darkgreen', "cyan"),
+       bty="n") 
+par(xpd=TRUE) # Allow drawing outside plot region
+
+# Close the graphics device
+dev.off()
+```
+
+
