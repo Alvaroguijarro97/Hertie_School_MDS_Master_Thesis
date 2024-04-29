@@ -639,8 +639,8 @@ The first round of differencing gave us a p-value above 0.05, so we need to appl
 
 ```{r}
 # Apply further differencing if necessary
-diff_workers_ts <- diff(diff_workers_ts)
-adf.test(diff_workers_ts, alternative = "stationary")
+diff_workers_ts_2 <- diff(diff_workers_ts)
+adf.test(diff_workers_ts_2, alternative = "stationary")
 ```
 After differencing we can see that our p-value is just slightly above the threshold of 0.05, we can assume that it is stationary and proceed to predict our variable.  
 
